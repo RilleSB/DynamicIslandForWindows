@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DynamicIslandPC", "DynamicIslandPC.csproj", "{7693844E-3464-D08B-AF22-0DAA85DD5BF0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7693844E-3464-D08B-AF22-0DAA85DD5BF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7693844E-3464-D08B-AF22-0DAA85DD5BF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7693844E-3464-D08B-AF22-0DAA85DD5BF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7693844E-3464-D08B-AF22-0DAA85DD5BF0}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2F63DC80-F35B-4947-BC63-3AE75AFDE938}
+	EndGlobalSection
+EndGlobal
