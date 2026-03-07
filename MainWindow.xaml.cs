@@ -109,7 +109,7 @@ namespace DynamicIslandPC
             
             updateTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(250)
+                Interval = TimeSpan.FromMilliseconds(500)
             };
             updateTimer.Tick += UpdateMusicInfo;
             updateTimer.Start();
