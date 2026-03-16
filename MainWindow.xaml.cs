@@ -22,6 +22,8 @@ namespace DynamicIslandPC
         private bool isFetchingMusic = false;
         private bool isPaused = false;
         private Storyboard rotationStoryboard;
+        private int _slideDirection = -1;
+        private TrackNotificationWindow _notification;
         private Storyboard glowStoryboard;
         private Storyboard _pauseInStoryboard;
         private Storyboard _pauseOutStoryboard;
@@ -323,11 +325,7 @@ namespace DynamicIslandPC
 
             if (trackChanged)
             {
-                AnimateTrackChange();
-                CrossfadeAlbumArt(musicInfo.AlbumArt);
-                CrossfadeText(
-                    musicInfo.Title ?? "Неизвестный трек",
-                    musicInfo.Artist ?? "Неизвестный исполнитель");
+                SlideContent(musicInfo);
                 ShowTrackNotification(musicInfo.Artist, musicInfo.Title);
             }
             else
@@ -342,6 +340,15 @@ namespace DynamicIslandPC
             }
 
             lastMusicInfo = musicInfo;
+
+            // Первый запуск без музыки — сразу PausedMode
+            if (lastMusicInfo == null && !musicInfo.IsPlaying)
+            {
+                isPaused = true;
+                var currentMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
+                currentMode.Visibility = Visibility.Collapsed;
+                PausedMode.Visibility = Visibility.Visible;
+            }
 
             if (musicInfo.Duration > TimeSpan.Zero)
                 SetProgressRatio(musicInfo.Position.TotalSeconds / musicInfo.Duration.TotalSeconds);
@@ -492,8 +499,13 @@ namespace DynamicIslandPC
         private void ShowTrackNotification(string artist, string title)
         {
             var text = $"{artist} — {title}";
-            var notification = new TrackNotificationWindow(text, Left, Top, Width, Height);
-            notification.Show();
+            if (_notification != null && _notification.IsLoaded)
+            {
+                _notification.UpdateText(text, Left, Top, Width, Height);
+                return;
+            }
+            _notification = new TrackNotificationWindow(text, Left, Top, Width, Height);
+            _notification.Show();
         }
 
         private void StartRotation()
@@ -533,69 +545,43 @@ namespace DynamicIslandPC
             }
         }
         
-        private void CrossfadeAlbumArt(System.Windows.Media.ImageSource newArt)
+        private void SlideContent(MusicInfo info)
         {
+            var dur = TimeSpan.FromMilliseconds(350);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            double offset = _slideDirection * Width;
+
+            // Заполняем старый контент текущими данными
             AlbumArtOld.Source = AlbumArt.Source;
             AlbumArtExpandedOld.Source = AlbumArtExpanded.Source;
-
-            AlbumArt.Source = newArt;
-            AlbumArtExpanded.Source = newArt;
-            AlbumArtMinimal.Source = newArt;
-
-            AlbumArtOld.Opacity = 1;
-            AlbumArtExpandedOld.Opacity = 1;
-            AlbumArt.Opacity = 0;
-            AlbumArtExpanded.Opacity = 0;
-
-            var dur = TimeSpan.FromMilliseconds(300);
-            AlbumArt.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur));
-            AlbumArtExpanded.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur));
-            AlbumArtOld.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, dur));
-            AlbumArtExpandedOld.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, dur));
-        }
-
-        private void CrossfadeText(string title, string artist)
-        {
             CompactTitleOld.Text = CompactTitle.Text;
             CompactArtistOld.Text = CompactArtist.Text;
             TrackTitleOld.Text = TrackTitle.Text;
             ArtistNameOld.Text = ArtistName.Text;
 
-            CompactTitle.Text = title;
-            CompactArtist.Text = artist;
-            TrackTitle.Text = title;
-            ArtistName.Text = artist;
+            // Заполняем новый контент
+            AlbumArt.Source = info.AlbumArt;
+            AlbumArtExpanded.Source = info.AlbumArt;
+            AlbumArtMinimal.Source = info.AlbumArt;
+            CompactTitle.Text = info.Title ?? "Неизвестный трек";
+            CompactArtist.Text = info.Artist ?? "Неизвестный исполнитель";
+            TrackTitle.Text = info.Title ?? "Неизвестный трек";
+            ArtistName.Text = info.Artist ?? "Неизвестный исполнитель";
 
-            CompactTextOld.Opacity = 1;
-            CompactTextNew.Opacity = 0;
-            ExpandedTextOld.Opacity = 1;
-            ExpandedTextNew.Opacity = 0;
-
-            var dur = TimeSpan.FromMilliseconds(300);
-            CompactTextNew.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur));
-            ExpandedTextNew.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur));
-            CompactTextOld.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, dur));
-            ExpandedTextOld.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, dur));
-        }
-
-        private void AnimateTrackChange()
-        {
-            var storyboard = new Storyboard();
-            
-            // Плавное изменение прозрачности
-            var opacityAnim = new DoubleAnimation
+            void Slide(TranslateTransform oldT, TranslateTransform newT)
             {
-                From = 1,
-                To = 0.5,
-                Duration = TimeSpan.FromMilliseconds(200),
-                AutoReverse = true,
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
-            };
-            Storyboard.SetTarget(opacityAnim, IslandBorder);
-            Storyboard.SetTargetProperty(opacityAnim, new PropertyPath("Opacity"));
-            storyboard.Children.Add(opacityAnim);
-            
-            storyboard.Begin();
+                // Старый уезжает в направлении слайда
+                oldT.X = 0;
+                newT.X = -offset; // новый стартует с противоположной стороны
+
+                var slideOut = new DoubleAnimation(0, offset, dur) { EasingFunction = ease };
+                var slideIn  = new DoubleAnimation(-offset, 0, dur) { EasingFunction = ease };
+                oldT.BeginAnimation(TranslateTransform.XProperty, slideOut);
+                newT.BeginAnimation(TranslateTransform.XProperty, slideIn);
+            }
+
+            Slide(CompactOldTranslate, CompactNewTranslate);
+            Slide(ExpandedOldTranslate, ExpandedNewTranslate);
         }
 
         private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
@@ -605,11 +591,13 @@ namespace DynamicIslandPC
 
         private void NextButton_Click(object sender, RoutedEventArgs e)
         {
+            _slideDirection = -1;
             musicService.NextTrack();
         }
 
         private void PrevButton_Click(object sender, RoutedEventArgs e)
         {
+            _slideDirection = 1;
             musicService.PreviousTrack();
         }
 

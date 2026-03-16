@@ -90,42 +90,53 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="6"/>
                 </Grid.RowDefinitions>
-                <Grid Grid.Row="0">
+
+                <Grid Grid.Row="0" ClipToBounds="True">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <Grid Grid.Column="0" Margin="5,0,0,0">
-                        <Ellipse Width="50" Height="50" Fill="Gray"/>
-                        <!-- Старая обложка (уходит) -->
-                        <Image x:Name="AlbumArtOld" Width="40" Height="40" Stretch="UniformToFill" Opacity="0">
-                            <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                        </Image>
-                        <!-- Новая обложка (появляется) -->
-                        <Image x:Name="AlbumArt" Width="40" Height="40" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
-                            <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                            <Image.RenderTransform>
-                                <RotateTransform x:Name="AlbumArtRotation" Angle="0"/>
-                            </Image.RenderTransform>
-                        </Image>
-                    </Grid>
-
-                    <Grid Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
-                        <!-- Старый текст (уходит) -->
-                        <StackPanel x:Name="CompactTextOld" Opacity="0">
+                    <!-- Слайд-контейнер: старый контент -->
+                    <Grid x:Name="CompactContentOld" Grid.Column="0" Opacity="1">
+                        <Grid.RenderTransform><TranslateTransform x:Name="CompactOldTranslate"/></Grid.RenderTransform>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" Margin="5,0,0,0">
+                            <Ellipse Width="50" Height="50" Fill="Gray"/>
+                            <Image x:Name="AlbumArtOld" Width="40" Height="40" Stretch="UniformToFill">
+                                <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
+                            </Image>
+                        </Grid>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
                             <TextBlock x:Name="CompactTitleOld" Foreground="White" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                             <TextBlock x:Name="CompactArtistOld" Foreground="#AAAAAA" FontSize="9" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
-                        <!-- Новый текст (появляется) -->
-                        <StackPanel x:Name="CompactTextNew">
+                    </Grid>
+
+                    <!-- Слайд-контейнер: новый контент -->
+                    <Grid x:Name="CompactContentNew" Grid.Column="0" Opacity="1">
+                        <Grid.RenderTransform><TranslateTransform x:Name="CompactNewTranslate"/></Grid.RenderTransform>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" Margin="5,0,0,0">
+                            <Ellipse Width="50" Height="50" Fill="Gray"/>
+                            <Image x:Name="AlbumArt" Width="40" Height="40" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
+                                <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
+                                <Image.RenderTransform><RotateTransform x:Name="AlbumArtRotation" Angle="0"/></Image.RenderTransform>
+                            </Image>
+                        </Grid>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
                             <TextBlock x:Name="CompactTitle" Text="Название" Foreground="White" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                             <TextBlock x:Name="CompactArtist" Text="Исполнитель" Foreground="#AAAAAA" FontSize="9" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                     </Grid>
 
-                    <Grid Grid.Column="2" x:Name="GifCompactContainer" Visibility="Collapsed" Margin="0,0,5,0" Width="50" Height="50">
+                    <Grid Grid.Column="1" x:Name="GifCompactContainer" Visibility="Collapsed" Margin="0,0,5,0" Width="50" Height="50">
                         <Ellipse Width="50" Height="50" Fill="Gray"/>
                         <Image x:Name="GifCompact" Width="40" Height="40" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
                             <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
@@ -147,46 +158,61 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="6"/>
                 </Grid.RowDefinitions>
-                <Grid Grid.Row="0">
+
+                <Grid Grid.Row="0" ClipToBounds="True">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <Grid Grid.Column="0" Margin="5,0,0,0">
-                        <Ellipse Width="50" Height="50" Fill="Gray"/>
-                        <Image x:Name="AlbumArtExpandedOld" Width="40" Height="40" Stretch="UniformToFill" Opacity="0">
-                            <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                        </Image>
-                        <Image x:Name="AlbumArtExpanded" Width="40" Height="40" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
-                            <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                            <Image.RenderTransform>
-                                <RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/>
-                            </Image.RenderTransform>
-                        </Image>
-                    </Grid>
-
-                    <Grid Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
-                        <StackPanel x:Name="ExpandedTextOld" Opacity="0">
+                    <!-- Слайд-контейнер: старый контент -->
+                    <Grid x:Name="ExpandedContentOld" Grid.Column="0" Opacity="1">
+                        <Grid.RenderTransform><TranslateTransform x:Name="ExpandedOldTranslate"/></Grid.RenderTransform>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" Margin="5,0,0,0">
+                            <Ellipse Width="50" Height="50" Fill="Gray"/>
+                            <Image x:Name="AlbumArtExpandedOld" Width="40" Height="40" Stretch="UniformToFill">
+                                <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
+                            </Image>
+                        </Grid>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
                             <TextBlock x:Name="TrackTitleOld" Foreground="White" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                             <TextBlock x:Name="ArtistNameOld" Foreground="#AAAAAA" FontSize="10" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
-                        <StackPanel x:Name="ExpandedTextNew">
+                    </Grid>
+
+                    <!-- Слайд-контейнер: новый контент -->
+                    <Grid x:Name="ExpandedContentNew" Grid.Column="0" Opacity="1">
+                        <Grid.RenderTransform><TranslateTransform x:Name="ExpandedNewTranslate"/></Grid.RenderTransform>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" Margin="5,0,0,0">
+                            <Ellipse Width="50" Height="50" Fill="Gray"/>
+                            <Image x:Name="AlbumArtExpanded" Width="40" Height="40" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
+                                <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
+                                <Image.RenderTransform><RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/></Image.RenderTransform>
+                            </Image>
+                        </Grid>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
                             <TextBlock x:Name="TrackTitle" Text="Название трека" Foreground="White" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                             <TextBlock x:Name="ArtistName" Text="Исполнитель" Foreground="#AAAAAA" FontSize="10" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                     </Grid>
 
-                    <Grid Grid.Column="2" x:Name="GifExpandedContainer" Visibility="Collapsed" Margin="0,0,5,0" Width="50" Height="50">
+                    <Grid Grid.Column="1" x:Name="GifExpandedContainer" Visibility="Collapsed" Margin="0,0,5,0" Width="50" Height="50">
                         <Ellipse Width="50" Height="50" Fill="Gray"/>
                         <Image x:Name="GifExpanded" Width="40" Height="40" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
                             <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
                         </Image>
                     </Grid>
 
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
                         <Button x:Name="PrevButton" Content="⏮" Style="{StaticResource ControlButtonStyle}" Click="PrevButton_Click"/>
                         <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource ControlButtonStyle}" Click="PlayPauseButton_Click"/>
                         <Button x:Name="NextButton" Content="⏭" Style="{StaticResource ControlButtonStyle}" Click="NextButton_Click"/>

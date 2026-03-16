@@ -14,13 +14,24 @@ namespace DynamicIslandPC
             InitializeComponent();
             NotificationText.Text = text;
 
-            // Позиционируем после загрузки чтобы знать ActualWidth
             Loaded += (s, e) =>
             {
-                Left = ownerLeft + ownerWidth / 2 - ActualWidth / 2;
-                Top = ownerTop + ownerHeight + 8;
+                UpdatePosition(ownerLeft, ownerTop, ownerWidth, ownerHeight);
                 FadeIn();
             };
+        }
+
+        public void UpdateText(string text, double ownerLeft, double ownerTop, double ownerWidth, double ownerHeight)
+        {
+            NotificationText.Text = text;
+            UpdatePosition(ownerLeft, ownerTop, ownerWidth, ownerHeight);
+            ResetTimer();
+        }
+
+        private void UpdatePosition(double ownerLeft, double ownerTop, double ownerWidth, double ownerHeight)
+        {
+            Left = ownerLeft + ownerWidth / 2 - ActualWidth / 2;
+            Top = ownerTop + ownerHeight + 8;
         }
 
         private void FadeIn()
@@ -34,12 +45,16 @@ namespace DynamicIslandPC
         private void ScheduleClose()
         {
             _closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-            _closeTimer.Tick += (s, e) =>
-            {
-                _closeTimer.Stop();
-                FadeOut();
-            };
+            _closeTimer.Tick += (s, e) => { _closeTimer.Stop(); FadeOut(); };
             _closeTimer.Start();
+        }
+
+        private void ResetTimer()
+        {
+            _closeTimer?.Stop();
+            BeginAnimation(OpacityProperty, null); // сбрасываем fade-out если шёл
+            Opacity = 1;
+            ScheduleClose();
         }
 
         private void FadeOut()
