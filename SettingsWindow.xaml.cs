@@ -77,15 +77,20 @@ namespace DynamicIslandPC
             }
         }
 
+        private void CenterButton_Click(object sender, RoutedEventArgs e)
+        {
+            SliderX.Value = SystemParameters.PrimaryScreenWidth / 2;
+        }
+
         private void TopButton_Click(object sender, RoutedEventArgs e)
         {
-            SliderX.Value = (SystemParameters.PrimaryScreenWidth - 60) / 2;
+            SliderX.Value = SystemParameters.PrimaryScreenWidth / 2;
             SliderY.Value = 20;
         }
 
         private void BottomButton_Click(object sender, RoutedEventArgs e)
         {
-            SliderX.Value = (SystemParameters.PrimaryScreenWidth - 60) / 2;
+            SliderX.Value = SystemParameters.PrimaryScreenWidth / 2;
             SliderY.Value = SystemParameters.PrimaryScreenHeight - 120;
         }
 

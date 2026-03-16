@@ -19,7 +19,7 @@
         </Grid.RowDefinitions>
         
         <StackPanel Grid.Row="0">
-            <TextBlock Text="Позиция X:" Foreground="White" FontSize="14" Margin="0,0,0,5"/>
+            <TextBlock Text="Центр по горизонтали (X):" Foreground="White" FontSize="14" Margin="0,0,0,5"/>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -60,7 +60,9 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Button Content="Вверху" Width="80" Height="30" Margin="0,0,10,0" Click="TopButton_Click"
                             Background="#3C3C3E" Foreground="White" BorderBrush="#555"/>
-                    <Button Content="Внизу" Width="80" Height="30" Click="BottomButton_Click"
+                    <Button Content="Внизу" Width="80" Height="30" Margin="0,0,10,0" Click="BottomButton_Click"
+                            Background="#3C3C3E" Foreground="White" BorderBrush="#555"/>
+                    <Button Content="По центру" Width="90" Height="30" Click="CenterButton_Click"
                             Background="#3C3C3E" Foreground="White" BorderBrush="#555"/>
                 </StackPanel>
                 <Button x:Name="ColorButton" Grid.Column="1" Content="Выбрать" Height="30" Click="ColorButton_Click"

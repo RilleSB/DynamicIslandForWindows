@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -27,37 +26,37 @@ namespace DynamicIslandPC
         private const byte VK_MEDIA_PREV_TRACK = 0xB1;
         private const uint KEYEVENTF_KEYUP = 0x0002;
 
-        private WindowsMediaService windowsMediaService;
+        private SMTCService smtcService;
+
+        public event Action<MusicInfo> MusicInfoChanged;
         
-        public MusicInfoService(HttpServerService httpServer = null)
+        public MusicInfoService()
         {
-            windowsMediaService = new WindowsMediaService(httpServer);
+            smtcService = new SMTCService();
+            smtcService.MusicInfoChanged += info =>
+            {
+                if (info.AlbumArt == null)
+                    info.AlbumArt = CreateDefaultAlbumArt();
+                MusicInfoChanged?.Invoke(info);
+            };
+            smtcService.Initialize();
         }
 
         public MusicInfo GetCurrentMusicInfo()
         {
-            var musicInfo = windowsMediaService.GetCurrentPlayingMusic();
+            var info = smtcService.GetLastKnownInfo() ?? new MusicInfo();
             
-            // Если музыка не найдена, показываем дефолтное состояние
-            if (string.IsNullOrEmpty(musicInfo.Title))
+            if (string.IsNullOrEmpty(info.Title))
             {
-                musicInfo.Title = "Нет воспроизведения";
-                musicInfo.Artist = "Запустите музыкальный плеер";
-                musicInfo.IsPlaying = false;
+                info.Title = "Нет воспроизведения";
+                info.Artist = "Запустите музыкальный плеер";
+                info.IsPlaying = false;
             }
             
-            // Устанавливаем дефолтную обложку если не найдена
-            if (musicInfo.AlbumArt == null)
-            {
-                musicInfo.AlbumArt = CreateDefaultAlbumArt();
-            }
+            if (info.AlbumArt == null)
+                info.AlbumArt = CreateDefaultAlbumArt();
             
-            return musicInfo;
-        }
-
-        public string GetDebugInfo()
-        {
-            return windowsMediaService.DebugInfo;
+            return info;
         }
 
 

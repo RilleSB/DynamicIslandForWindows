@@ -11,79 +11,115 @@ namespace DynamicIslandPC
     public class SMTCService
     {
         private MusicInfo lastKnownInfo = null;
-        private DateTime lastSuccessTime = DateTime.MinValue;
-        
-        public string DebugInfo { get; private set; } = "";
+        private GlobalSystemMediaTransportControlsSessionManager sessionManager = null;
+        private GlobalSystemMediaTransportControlsSession currentSession = null;
+        private bool initialized = false;
 
-        public MusicInfo GetMediaFromSMTC()
+        public event Action<MusicInfo> MusicInfoChanged;
+
+        public void Initialize()
         {
-            var musicInfo = new MusicInfo();
+            if (initialized) return;
+            initialized = true;
+            
+            Task.Run(async () =>
+            {
+                try
+                {
+                    sessionManager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                    sessionManager.CurrentSessionChanged += OnSessionChanged;
+                    SubscribeToSession(sessionManager.GetCurrentSession());
+                    await FetchAndNotify();
+                }
+                catch { }
+            });
+        }
 
+        private void OnSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender, CurrentSessionChangedEventArgs args)
+        {
+            SubscribeToSession(sender.GetCurrentSession());
+            Task.Run(FetchAndNotify);
+        }
+
+        private void SubscribeToSession(GlobalSystemMediaTransportControlsSession session)
+        {
+            if (currentSession != null)
+            {
+                currentSession.MediaPropertiesChanged -= OnMediaPropertiesChanged;
+                currentSession.PlaybackInfoChanged -= OnPlaybackInfoChanged;
+            }
+            
+            currentSession = session;
+            
+            if (currentSession != null)
+            {
+                currentSession.MediaPropertiesChanged += OnMediaPropertiesChanged;
+                currentSession.PlaybackInfoChanged += OnPlaybackInfoChanged;
+            }
+        }
+
+        private void OnMediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args)
+        {
+            Task.Run(FetchAndNotify);
+        }
+
+        private void OnPlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
+        {
+            Task.Run(FetchAndNotify);
+        }
+
+        private async Task FetchAndNotify()
+        {
+            var info = await FetchCurrentInfo();
+            if (info != null)
+            {
+                lastKnownInfo = info;
+                MusicInfoChanged?.Invoke(info);
+            }
+        }
+
+        private async Task<MusicInfo> FetchCurrentInfo()
+        {
             try
             {
-                var sessionManager = Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager.RequestAsync().GetAwaiter().GetResult();
-                
-                if (sessionManager == null)
-                    return musicInfo;
+                var session = currentSession ?? sessionManager?.GetCurrentSession();
+                if (session == null) return lastKnownInfo;
 
-                var sessions = sessionManager.GetSessions();
-                
-                foreach (var session in sessions)
+                var props = await session.TryGetMediaPropertiesAsync();
+                if (props == null || string.IsNullOrEmpty(props.Title)) return lastKnownInfo;
+
+                var timeline = session.GetTimelineProperties();
+                var info = new MusicInfo
                 {
-                    if (session == null)
-                        continue;
+                    Title = props.Title,
+                    Artist = props.Artist,
+                    IsPlaying = session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
+                    Position = timeline?.Position ?? TimeSpan.Zero,
+                    Duration = timeline?.EndTime ?? TimeSpan.Zero
+                };
 
+                if (props.Thumbnail != null)
+                {
                     try
                     {
-                        var props = session.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
-                        var timeline = session.GetTimelineProperties();
-
-                        if (props != null && !string.IsNullOrEmpty(props.Title))
-                        {
-                            musicInfo.Title = props.Title;
-                            musicInfo.Artist = props.Artist;
-                            musicInfo.IsPlaying = true;
-                            
-                            // Получаем время только если оно валидное
-                            if (timeline != null && timeline.EndTime.TotalSeconds > 0)
-                            {
-                                musicInfo.Position = timeline.Position;
-                                musicInfo.Duration = timeline.EndTime;
-                            }
-                            
-                            // Загружаем обложку
-                            if (props.Thumbnail != null)
-                            {
-                                try
-                                {
-                                    var stream = props.Thumbnail.OpenReadAsync().GetAwaiter().GetResult();
-                                    var image = new BitmapImage();
-                                    image.BeginInit();
-                                    image.CacheOption = BitmapCacheOption.OnLoad;
-                                    image.StreamSource = stream.AsStreamForRead();
-                                    image.EndInit();
-                                    image.Freeze();
-                                    musicInfo.AlbumArt = image;
-                                }
-                                catch { }
-                            }
-                            
-                            lastKnownInfo = musicInfo;
-                            lastSuccessTime = DateTime.Now;
-                            return musicInfo;
-                        }
+                        var stream = await props.Thumbnail.OpenReadAsync();
+                        var image = new BitmapImage();
+                        image.BeginInit();
+                        image.CacheOption = BitmapCacheOption.OnLoad;
+                        image.StreamSource = stream.AsStreamForRead();
+                        image.EndInit();
+                        image.Freeze();
+                        info.AlbumArt = image;
                     }
                     catch { }
                 }
+
+                return info;
             }
             catch { }
-
-            if (lastKnownInfo != null && (DateTime.Now - lastSuccessTime).TotalSeconds < 10)
-            {
-                return lastKnownInfo;
-            }
-
-            return musicInfo;
+            return lastKnownInfo;
         }
+
+        public MusicInfo GetLastKnownInfo() => lastKnownInfo;
     }
 }

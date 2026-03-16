@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,16 +18,22 @@ namespace DynamicIslandPC
         private MusicInfoService musicService;
         private DispatcherTimer updateTimer;
         private DebugWindow debugWindow;
-        private HttpServerService httpServer;
-        private string lastTrackId = "";
+        private MusicInfo lastMusicInfo = null;
+        private bool isFetchingMusic = false;
+        private bool isPaused = false;
         private Storyboard rotationStoryboard;
         private Storyboard glowStoryboard;
+        private Storyboard _pauseInStoryboard;
+        private Storyboard _pauseOutStoryboard;
+        private DispatcherTimer _pauseDebounceTimer;
         private System.Windows.Forms.NotifyIcon trayIcon;
         private bool isTopPosition = true;
         private double customX = -1;
         private double customY = -1;
         private bool isDarkTheme = true;
         private double scale = 1.0;
+        private AppSettings _settings;
+        private DispatcherTimer _progressTimer;
         
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -45,6 +52,8 @@ namespace DynamicIslandPC
                 Logger.Log("Application starting...");
                 InitializeComponent();
                 Opacity = 0;
+                _settings = SettingsService.Load();
+                ApplySettings(_settings);
                 InitializeWindow();
                 InitializeMusicService();
                 RegisterGlobalHotkey();
@@ -58,6 +67,25 @@ namespace DynamicIslandPC
                 Logger.Error("Failed to start application", ex);
                 throw;
             }
+        }
+
+        private void ApplySettings(AppSettings s)
+        {
+            scale = s.Scale;
+            isTopPosition = s.IsTopPosition;
+            customX = s.CustomX;
+            customY = s.CustomY;
+            isDarkTheme = s.IsDarkTheme;
+        }
+
+        private void SaveSettings()
+        {
+            _settings.Scale = scale;
+            _settings.IsTopPosition = isTopPosition;
+            _settings.CustomX = customX;
+            _settings.CustomY = customY;
+            _settings.IsDarkTheme = isDarkTheme;
+            SettingsService.Save(_settings);
         }
 
         private void InitializeWindow()
@@ -102,19 +130,39 @@ namespace DynamicIslandPC
 
         private void InitializeMusicService()
         {
-            httpServer = new HttpServerService();
-            httpServer.Start();
-            
-            musicService = new MusicInfoService(httpServer);
-            
-            updateTimer = new DispatcherTimer
+            musicService = new MusicInfoService();
+            musicService.MusicInfoChanged += info => Dispatcher.Invoke(() => ApplyMusicInfo(info));
+            ApplyMusicInfo(musicService.GetCurrentMusicInfo());
+            InitializeProgressTimer();
+        }
+
+        private void InitializeProgressTimer()
+        {
+            _progressTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _progressTimer.Tick += (s, e) =>
             {
-                Interval = TimeSpan.FromMilliseconds(500)
+                if (lastMusicInfo == null || lastMusicInfo.Duration == TimeSpan.Zero) return;
+                if (lastMusicInfo.IsPlaying)
+                    lastMusicInfo.Position += TimeSpan.FromSeconds(1);
+                SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
             };
-            updateTimer.Tick += UpdateMusicInfo;
-            updateTimer.Start();
-            
-            UpdateMusicInfo(null, null);
+            _progressTimer.Start();
+        }
+
+        private void SetProgressRatio(double ratio)
+        {
+            if (isPaused) return;
+            ratio = Math.Min(1.0, Math.Max(0.0, ratio));
+            void Apply(System.Windows.Shapes.Rectangle track, System.Windows.Shapes.Rectangle bar, System.Windows.Shapes.Ellipse dot)
+            {
+                var w = track.ActualWidth;
+                if (w <= 0) return;
+                var filled = w * ratio;
+                bar.Width = filled;
+                dot.Margin = new Thickness(Math.Max(0, filled - 3), 0, 0, 0);
+            }
+            Apply(ProgressTrackCompact, ProgressBarCompact, ProgressDotCompact);
+            Apply(ProgressTrackExpanded, ProgressBarExpanded, ProgressDotExpanded);
         }
 
         private void RegisterGlobalHotkey()
@@ -203,8 +251,7 @@ namespace DynamicIslandPC
                 };
             }
             
-            double baseWidth = displayMode == 0 ? 115 : (displayMode == 1 ? 335 : 535);
-            double baseHeight = displayMode == 0 ? 60 : (displayMode == 1 ? 70 : 110);
+            var (baseWidth, baseHeight) = GetModeSize(displayMode);
             double targetWidth = baseWidth * scale;
             double targetHeight = baseHeight * scale;
             
@@ -213,7 +260,7 @@ namespace DynamicIslandPC
             
             if (customX >= 0 && customY >= 0)
             {
-                targetLeft = customX;
+                targetLeft = customX - targetWidth / 2;
                 targetTop = customY;
             }
             else
@@ -265,58 +312,190 @@ namespace DynamicIslandPC
             storyboard.Begin();
         }
 
-        private void UpdateMusicInfo(object sender, EventArgs e)
+        private void ApplyMusicInfo(MusicInfo musicInfo)
         {
-            var musicInfo = musicService.GetCurrentMusicInfo();
+            if (musicInfo == null) return;
             
-            if (musicInfo != null)
+            var currentTrackId = $"{musicInfo.Artist}|{musicInfo.Title}";
+            var prevTrackId = lastMusicInfo != null ? $"{lastMusicInfo.Artist}|{lastMusicInfo.Title}" : "";
+            
+            bool trackChanged = currentTrackId != prevTrackId;
+
+            if (trackChanged)
             {
-                var currentTrackId = $"{musicInfo.Artist}|{musicInfo.Title}";
-                
-                // Анимация при смене трека
-                if (currentTrackId != lastTrackId && !string.IsNullOrEmpty(musicInfo.Title))
-                {
-                    AnimateTrackChange();
-                    lastTrackId = currentTrackId;
-                }
-                
+                AnimateTrackChange();
+                CrossfadeAlbumArt(musicInfo.AlbumArt);
+                CrossfadeText(
+                    musicInfo.Title ?? "Неизвестный трек",
+                    musicInfo.Artist ?? "Неизвестный исполнитель");
+                ShowTrackNotification(musicInfo.Artist, musicInfo.Title);
+            }
+            else
+            {
                 TrackTitle.Text = musicInfo.Title ?? "Неизвестный трек";
                 ArtistName.Text = musicInfo.Artist ?? "Неизвестный исполнитель";
                 CompactTitle.Text = musicInfo.Title ?? "Неизвестный трек";
                 CompactArtist.Text = musicInfo.Artist ?? "Неизвестный исполнитель";
-                
                 AlbumArtMinimal.Source = musicInfo.AlbumArt;
                 AlbumArt.Source = musicInfo.AlbumArt;
                 AlbumArtExpanded.Source = musicInfo.AlbumArt;
-                
-                // Показываем GIF рядом с иконкой при воспроизведении
-                if (musicInfo.IsPlaying)
+            }
+
+            lastMusicInfo = musicInfo;
+
+            if (musicInfo.Duration > TimeSpan.Zero)
+                SetProgressRatio(musicInfo.Position.TotalSeconds / musicInfo.Duration.TotalSeconds);
+            
+            var gifVisible = musicInfo.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
+            GifMinimalContainer.Visibility = gifVisible;
+            GifCompactContainer.Visibility = gifVisible;
+            GifExpandedContainer.Visibility = gifVisible;
+            
+            if (!musicInfo.IsPlaying) StopRotation();
+            
+            PlayPauseButton.Content = musicInfo.IsPlaying ? "⏸" : "▶";
+            this.Title = $"Dynamic Island PC - {musicInfo.Title} - {musicInfo.Artist}";
+            
+            // Переключаем режим паузы
+            if (!musicInfo.IsPlaying && !isPaused)
+            {
+                _pauseDebounceTimer?.Stop();
+                _pauseDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+                _pauseDebounceTimer.Tick += (s, e) =>
                 {
-                    GifMinimalContainer.Visibility = Visibility.Visible;
-                    GifCompactContainer.Visibility = Visibility.Visible;
-                    GifExpandedContainer.Visibility = Visibility.Visible;
-                    StopRotation();
-                }
-                else
-                {
-                    GifMinimalContainer.Visibility = Visibility.Collapsed;
-                    GifCompactContainer.Visibility = Visibility.Collapsed;
-                    GifExpandedContainer.Visibility = Visibility.Collapsed;
-                    StopRotation();
-                }
-                
-                PlayPauseButton.Content = musicInfo.IsPlaying ? "⏸" : "▶";
-                
-                this.Title = $"Dynamic Island PC - {musicInfo.Title} - {musicInfo.Artist}";
-                
-                if (debugWindow != null)
-                {
-                    debugWindow.ClearDebugInfo();
-                    debugWindow.AddDebugInfo(musicService.GetDebugInfo());
-                }
+                    _pauseDebounceTimer.Stop();
+                    if (!isPaused)
+                    {
+                        isPaused = true;
+                        AnimateToPaused();
+                    }
+                };
+                _pauseDebounceTimer.Start();
+            }
+            else if (musicInfo.IsPlaying && isPaused)
+            {
+                _pauseDebounceTimer?.Stop();
+                isPaused = false;
+                AnimateFromPaused();
+            }
+            else if (musicInfo.IsPlaying)
+            {
+                _pauseDebounceTimer?.Stop();
             }
         }
         
+        private (double width, double height) GetModeSize(int mode) => mode switch
+        {
+            0 => (115, 60),
+            1 => (335, 70),
+            _ => (535, 110)
+        };
+
+        private double GetTargetLeft(double targetWidth)
+        {
+            if (customX >= 0)
+                return customX - targetWidth / 2;
+            return (SystemParameters.PrimaryScreenWidth - targetWidth) / 2;
+        }
+
+        private void AnimateToPaused()
+        {
+            var currentMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
+
+            _pauseOutStoryboard?.Stop();
+            _pauseInStoryboard?.Stop();
+
+            var fadeOut = new DoubleAnimation { From = 1, To = 0, Duration = TimeSpan.FromMilliseconds(300) };
+            fadeOut.Completed += (s, e) =>
+            {
+                currentMode.Visibility = Visibility.Collapsed;
+                PausedMode.Visibility = Visibility.Visible;
+                PausedMode.Opacity = 0;
+
+                _pauseInStoryboard = new Storyboard();
+
+                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(200) };
+                Storyboard.SetTarget(fadeIn, PausedMode);
+                Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
+                _pauseInStoryboard.Children.Add(fadeIn);
+
+                var pausedSize = 60 * scale;
+                var w = new DoubleAnimation { To = pausedSize, Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                Storyboard.SetTarget(w, this);
+                Storyboard.SetTargetProperty(w, new PropertyPath("Width"));
+                _pauseInStoryboard.Children.Add(w);
+
+                var h = new DoubleAnimation { To = pausedSize, Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                Storyboard.SetTarget(h, this);
+                Storyboard.SetTargetProperty(h, new PropertyPath("Height"));
+                _pauseInStoryboard.Children.Add(h);
+
+                var l = new DoubleAnimation { To = GetTargetLeft(pausedSize), Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                Storyboard.SetTarget(l, this);
+                Storyboard.SetTargetProperty(l, new PropertyPath("Left"));
+                _pauseInStoryboard.Children.Add(l);
+
+                _pauseInStoryboard.Begin();
+            };
+            currentMode.BeginAnimation(OpacityProperty, fadeOut);
+        }
+
+        private void AnimateFromPaused()
+        {
+            var targetMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
+            var (baseWidth, baseHeight) = GetModeSize(displayMode);
+
+            _pauseInStoryboard?.Stop();
+            _pauseOutStoryboard?.Stop();
+            _pauseOutStoryboard = new Storyboard();
+
+            var fadeOut = new DoubleAnimation { From = 1, To = 0, Duration = TimeSpan.FromMilliseconds(200) };
+            fadeOut.Completed += (s, e) =>
+            {
+                PausedMode.Visibility = Visibility.Collapsed;
+                targetMode.Visibility = Visibility.Visible;
+                targetMode.Opacity = 0;
+
+                var sb = new Storyboard();
+
+                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(300) };
+                Storyboard.SetTarget(fadeIn, targetMode);
+                Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
+                sb.Children.Add(fadeIn);
+
+                var tw = baseWidth * scale;
+                var w = new DoubleAnimation { To = tw, Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                Storyboard.SetTarget(w, this);
+                Storyboard.SetTargetProperty(w, new PropertyPath("Width"));
+                sb.Children.Add(w);
+
+                var h = new DoubleAnimation { To = baseHeight * scale, Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                Storyboard.SetTarget(h, this);
+                Storyboard.SetTargetProperty(h, new PropertyPath("Height"));
+                sb.Children.Add(h);
+
+                var l = new DoubleAnimation { To = GetTargetLeft(tw), Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                Storyboard.SetTarget(l, this);
+                Storyboard.SetTargetProperty(l, new PropertyPath("Left"));
+                sb.Children.Add(l);
+
+                sb.Completed += (_, __) =>
+                {
+                    if (lastMusicInfo?.Duration > TimeSpan.Zero)
+                        SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
+                };
+                sb.Begin();
+            };
+            PausedMode.BeginAnimation(OpacityProperty, fadeOut);
+        }
+
+        private void ShowTrackNotification(string artist, string title)
+        {
+            var text = $"{artist} — {title}";
+            var notification = new TrackNotificationWindow(text, Left, Top, Width, Height);
+            notification.Show();
+        }
+
         private void StartRotation()
         {
             if (rotationStoryboard != null) return;
@@ -354,6 +533,51 @@ namespace DynamicIslandPC
             }
         }
         
+        private void CrossfadeAlbumArt(System.Windows.Media.ImageSource newArt)
+        {
+            AlbumArtOld.Source = AlbumArt.Source;
+            AlbumArtExpandedOld.Source = AlbumArtExpanded.Source;
+
+            AlbumArt.Source = newArt;
+            AlbumArtExpanded.Source = newArt;
+            AlbumArtMinimal.Source = newArt;
+
+            AlbumArtOld.Opacity = 1;
+            AlbumArtExpandedOld.Opacity = 1;
+            AlbumArt.Opacity = 0;
+            AlbumArtExpanded.Opacity = 0;
+
+            var dur = TimeSpan.FromMilliseconds(300);
+            AlbumArt.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur));
+            AlbumArtExpanded.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur));
+            AlbumArtOld.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, dur));
+            AlbumArtExpandedOld.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, dur));
+        }
+
+        private void CrossfadeText(string title, string artist)
+        {
+            CompactTitleOld.Text = CompactTitle.Text;
+            CompactArtistOld.Text = CompactArtist.Text;
+            TrackTitleOld.Text = TrackTitle.Text;
+            ArtistNameOld.Text = ArtistName.Text;
+
+            CompactTitle.Text = title;
+            CompactArtist.Text = artist;
+            TrackTitle.Text = title;
+            ArtistName.Text = artist;
+
+            CompactTextOld.Opacity = 1;
+            CompactTextNew.Opacity = 0;
+            ExpandedTextOld.Opacity = 1;
+            ExpandedTextNew.Opacity = 0;
+
+            var dur = TimeSpan.FromMilliseconds(300);
+            CompactTextNew.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur));
+            ExpandedTextNew.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur));
+            CompactTextOld.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, dur));
+            ExpandedTextOld.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, dur));
+        }
+
         private void AnimateTrackChange()
         {
             var storyboard = new Storyboard();
@@ -454,7 +678,7 @@ namespace DynamicIslandPC
             customX = -1;
             customY = -1;
             AnimateToMode();
-            
+            SaveSettings();
             var menu = (System.Windows.Forms.ToolStripMenuItem)trayIcon.ContextMenuStrip.Items[0];
             ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[0]).Checked = top;
             ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[1]).Checked = !top;
@@ -464,7 +688,7 @@ namespace DynamicIslandPC
         {
             if (customX >= 0 && customY >= 0)
             {
-                Left = customX;
+                Left = customX - Width / 2;
                 Top = customY;
             }
             else
@@ -476,7 +700,7 @@ namespace DynamicIslandPC
         
         private void OpenSettings()
         {
-            var currentX = customX >= 0 ? customX : Left;
+            var currentX = customX >= 0 ? customX : Left + Width / 2;
             var currentY = customY >= 0 ? customY : Top;
             
             var settingsWindow = new SettingsWindow(currentX, currentY, 
@@ -510,6 +734,7 @@ namespace DynamicIslandPC
             ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[0]).Checked = dark;
             ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[1]).Checked = !dark;
             
+            SaveSettings();
             Logger.Log($"Theme changed to {(dark ? "dark" : "light")}");
         }
         
@@ -517,9 +742,7 @@ namespace DynamicIslandPC
         {
             scale = newScale;
             
-            var baseWidth = displayMode == 0 ? 115 : (displayMode == 1 ? 335 : 535);
-            var baseHeight = displayMode == 0 ? 60 : (displayMode == 1 ? 70 : 110);
-            
+            var (baseWidth, baseHeight) = GetModeSize(displayMode);
             Width = baseWidth * scale;
             Height = baseHeight * scale;
             UpdateWindowPosition();
@@ -537,6 +760,7 @@ namespace DynamicIslandPC
             else if (Math.Abs(newScale - 1.5) < 0.01)
                 ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[2]).Checked = true;
             
+            SaveSettings();
             Logger.Log($"Scale changed to {(int)(newScale * 100)}%");
         }
         
@@ -587,8 +811,10 @@ namespace DynamicIslandPC
         {
             var helper = new System.Windows.Interop.WindowInteropHelper(this);
             UnregisterHotKey(helper.Handle, HOTKEY_ID);
+            _progressTimer?.Stop();
+            _pauseDebounceTimer?.Stop();
+            SaveSettings();
             updateTimer?.Stop();
-            httpServer?.Stop();
             trayIcon?.Dispose();
             base.OnClosed(e);
         }
