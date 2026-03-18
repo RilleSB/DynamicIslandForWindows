@@ -2,35 +2,39 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:gif="http://wpfanimatedgif.codeplex.com"
-        Title="Dynamic Island PC" 
-        Width="115" Height="60"
-        WindowStyle="None" 
-        AllowsTransparency="True" 
+        Title="Dynamic Island PC"
+        Width="138" Height="60"
+        WindowStyle="None"
+        AllowsTransparency="True"
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize">
-    
+
     <Window.Resources>
         <Style x:Key="ControlButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Background" Value="#14FFFFFF"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Width" Value="30"/>
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderBrush" Value="#24FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
-                                CornerRadius="15">
-                            <ContentPresenter HorizontalAlignment="Center" 
-                                            VerticalAlignment="Center"/>
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#333333"/>
+                                <Setter Property="Background" Value="#28FFFFFF"/>
+                                <Setter Property="BorderBrush" Value="#42FFFFFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -38,195 +42,398 @@
             </Setter>
         </Style>
     </Window.Resources>
-    
+
     <Grid ClipToBounds="False">
-        <Border x:Name="IslandBorder" 
+        <Border x:Name="IslandBorder"
                 CornerRadius="35"
+                BorderBrush="#2AFFFFFF"
+                BorderThickness="1"
                 ClipToBounds="False">
             <Border.Background>
                 <SolidColorBrush Color="#000000" Opacity="0.7"/>
             </Border.Background>
-        
-        <Grid>
-            <!-- Режим паузы - маленький pill с иконкой паузы -->
-            <Grid x:Name="PausedMode" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock Text="⏸" Foreground="White" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Grid>
-            
-            <!-- Минимальный режим - иконка + гифка -->
-            <Grid x:Name="MinimalMode" Visibility="Visible">
-                <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <Grid Grid.Column="0">
-                        <Ellipse Width="50" Height="50" Fill="Gray"/>
-                        <Image x:Name="AlbumArtMinimal" Width="40" Height="40" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
-                            <Image.Clip>
-                                <EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/>
-                            </Image.Clip>
-                            <Image.RenderTransform>
-                                <RotateTransform x:Name="AlbumArtMinimalRotation" Angle="0"/>
-                            </Image.RenderTransform>
-                        </Image>
-                    </Grid>
-                    
-                    <Grid Grid.Column="1" x:Name="GifMinimalContainer" Visibility="Collapsed" Margin="5,0,0,0" Width="50" Height="50">
-                        <Ellipse Width="50" Height="50" Fill="Gray"/>
-                        <Image x:Name="GifMinimal" Width="40" Height="40" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
-                            <Image.Clip>
-                                <EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/>
-                            </Image.Clip>
-                        </Image>
-                    </Grid>
-                </Grid>
-            </Grid>
-            
-            <!-- Компактный режим - иконка + текст + гифка -->
-            <Grid x:Name="CompactMode" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="6"/>
-                </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0" ClipToBounds="True">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+            <Grid>
+                <Border CornerRadius="35" Margin="1" IsHitTestVisible="False" Opacity="0.85">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#2DFFFFFF" Offset="0"/>
+                            <GradientStop Color="#12FFFFFF" Offset="0.32"/>
+                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
 
-                    <!-- Слайд-контейнер: старый контент -->
-                    <Grid x:Name="CompactContentOld" Grid.Column="0" Opacity="1">
-                        <Grid.RenderTransform><TranslateTransform x:Name="CompactOldTranslate"/></Grid.RenderTransform>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid Grid.Column="0" Margin="5,0,0,0">
-                            <Ellipse Width="50" Height="50" Fill="Gray"/>
-                            <Image x:Name="AlbumArtOld" Width="40" Height="40" Stretch="UniformToFill">
-                                <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                            </Image>
+                <Border CornerRadius="35" Margin="1" IsHitTestVisible="False" VerticalAlignment="Top" Height="24" Opacity="0.65">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#38FFFFFF" Offset="0"/>
+                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <Grid>
+                    <Border x:Name="TrackRevealOverlay"
+                            Visibility="Collapsed"
+                            Opacity="0"
+                            CornerRadius="22"
+                            Margin="8"
+                            Height="50"
+                            VerticalAlignment="Center"
+                            Background="#C0141418"
+                            BorderBrush="#2EFFFFFF"
+                            BorderThickness="1"
+                            Panel.ZIndex="20"
+                            IsHitTestVisible="False">
+                        <Grid Margin="10,7">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="34" Height="34" CornerRadius="10" Background="#1EFFFFFF">
+                                <Image x:Name="RevealAlbumArt" Width="30" Height="30" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,30,30" RadiusX="8" RadiusY="8"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="RevealTitleText" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="RevealSubtitleText" Foreground="#C4C4CC" FontSize="8.5" Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
                         </Grid>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
-                            <TextBlock x:Name="CompactTitleOld" Foreground="White" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="CompactArtistOld" Foreground="#AAAAAA" FontSize="9" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                    </Grid>
+                    </Border>
 
-                    <!-- Слайд-контейнер: новый контент -->
-                    <Grid x:Name="CompactContentNew" Grid.Column="0" Opacity="1">
-                        <Grid.RenderTransform><TranslateTransform x:Name="CompactNewTranslate"/></Grid.RenderTransform>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid Grid.Column="0" Margin="5,0,0,0">
-                            <Ellipse Width="50" Height="50" Fill="Gray"/>
-                            <Image x:Name="AlbumArt" Width="40" Height="40" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
-                                <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                                <Image.RenderTransform><RotateTransform x:Name="AlbumArtRotation" Angle="0"/></Image.RenderTransform>
+                    <Grid x:Name="PausedMode" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Width="56" Height="56">
+                            <Ellipse Fill="#18FFFFFF" Stroke="#28FFFFFF" StrokeThickness="1"/>
+                            <Image x:Name="AlbumArtPaused" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image.Clip>
+                                    <EllipseGeometry Center="23,23" RadiusX="23" RadiusY="23"/>
+                                </Image.Clip>
                             </Image>
+                            <Border Width="24" Height="24" CornerRadius="12" Background="#B8000000" BorderBrush="#30FFFFFF" BorderThickness="1"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                <TextBlock Text="⏸" Foreground="White" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
                         </Grid>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
-                            <TextBlock x:Name="CompactTitle" Text="Название" Foreground="White" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="CompactArtist" Text="Исполнитель" Foreground="#AAAAAA" FontSize="9" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
                     </Grid>
 
-                    <Grid Grid.Column="1" x:Name="GifCompactContainer" Visibility="Collapsed" Margin="0,0,5,0" Width="50" Height="50">
-                        <Ellipse Width="50" Height="50" Fill="Gray"/>
-                        <Image x:Name="GifCompact" Width="40" Height="40" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
-                            <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                        </Image>
-                    </Grid>
-                </Grid>
+                    <Grid x:Name="MinimalMode" Visibility="Visible">
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                <!-- Прогресс-бар -->
-                <Grid Grid.Row="1" Margin="8,0,8,1" VerticalAlignment="Bottom">
-                    <Rectangle x:Name="ProgressTrackCompact" Height="2" Fill="#444444" RadiusX="1" RadiusY="1" HorizontalAlignment="Stretch"/>
-                    <Rectangle x:Name="ProgressBarCompact" Height="2" Fill="White" RadiusX="1" RadiusY="1" HorizontalAlignment="Left" Width="0"/>
-                    <Ellipse x:Name="ProgressDotCompact" Width="6" Height="6" Fill="White" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0"/>
+                            <Grid Grid.Column="0">
+                                <Ellipse Width="54" Height="54" Fill="#1CFFFFFF"/>
+                                <Image x:Name="AlbumArtMinimal" Width="46" Height="46" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
+                                    <Image.Clip>
+                                        <EllipseGeometry Center="23,23" RadiusX="23" RadiusY="23"/>
+                                    </Image.Clip>
+                                    <Image.RenderTransform>
+                                        <RotateTransform x:Name="AlbumArtMinimalRotation" Angle="0"/>
+                                    </Image.RenderTransform>
+                                </Image>
+                            </Grid>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                                <StackPanel x:Name="PlaybackIndicatorMinimal" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0" Visibility="Collapsed">
+                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2,0">
+                                        <Rectangle.Triggers>
+                                            <EventTrigger RoutedEvent="Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                        <DoubleAnimation Storyboard.TargetProperty="Height" From="8" To="15" Duration="0:0:0.45"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Rectangle.Triggers>
+                                    </Rectangle>
+                                    <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2,0">
+                                        <Rectangle.Triggers>
+                                            <EventTrigger RoutedEvent="Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="7" To="17" Duration="0:0:0.5"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Rectangle.Triggers>
+                                    </Rectangle>
+                                    <Rectangle Width="3" Height="11" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF">
+                                        <Rectangle.Triggers>
+                                            <EventTrigger RoutedEvent="Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="6" To="14" Duration="0:0:0.42"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Rectangle.Triggers>
+                                    </Rectangle>
+                                </StackPanel>
+
+                                <Grid Grid.Column="1" x:Name="GifMinimalContainer" Visibility="Collapsed" Width="50" Height="50">
+                                    <Ellipse Width="50" Height="50" Fill="#1AFFFFFF"/>
+                                    <Image x:Name="GifMinimal" Width="42" Height="42" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                        <Image.Clip>
+                                            <EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+
+                    <Grid x:Name="CompactMode" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="6"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" ClipToBounds="True">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid x:Name="CompactContentOld" Grid.Column="0" Opacity="0">
+                                <Grid.RenderTransform><TranslateTransform x:Name="CompactOldTranslate"/></Grid.RenderTransform>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <Ellipse Width="54" Height="54" Fill="#1CFFFFFF"/>
+                                    <Image x:Name="AlbumArtOld" Width="46" Height="46" Stretch="UniformToFill">
+                                        <Image.Clip><EllipseGeometry Center="23,23" RadiusX="23" RadiusY="23"/></Image.Clip>
+                                    </Image>
+                                </Grid>
+                                <StackPanel x:Name="CompactTextOldContainer" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0">
+                                    <Grid ClipToBounds="True">
+                                        <TextBlock x:Name="CompactTitleOld" Foreground="White" FontSize="12" FontWeight="SemiBold" TextTrimming="None" RenderTransformOrigin="0,0.5">
+                                            <TextBlock.RenderTransform>
+                                                <TranslateTransform x:Name="CompactTitleOldTranslate"/>
+                                            </TextBlock.RenderTransform>
+                                        </TextBlock>
+                                    </Grid>
+                                    <TextBlock x:Name="CompactArtistOld" Foreground="#C4C4CC" FontSize="9.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="CompactSourceTextOld" Text="Media" Foreground="#8C8C96" FontSize="8.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid x:Name="CompactContentNew" Grid.Column="0" Opacity="1">
+                                <Grid.RenderTransform><TranslateTransform x:Name="CompactNewTranslate"/></Grid.RenderTransform>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <Ellipse Width="54" Height="54" Fill="#1CFFFFFF"/>
+                                    <Image x:Name="AlbumArt" Width="46" Height="46" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
+                                        <Image.Clip><EllipseGeometry Center="23,23" RadiusX="23" RadiusY="23"/></Image.Clip>
+                                        <Image.RenderTransform><RotateTransform x:Name="AlbumArtRotation" Angle="0"/></Image.RenderTransform>
+                                    </Image>
+                                </Grid>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0">
+                                    <Grid ClipToBounds="True">
+                                        <TextBlock x:Name="CompactTitle" Text="Название" Foreground="White" FontSize="12" FontWeight="SemiBold" TextTrimming="None" RenderTransformOrigin="0,0.5">
+                                            <TextBlock.RenderTransform>
+                                                <TranslateTransform x:Name="CompactTitleTranslate"/>
+                                            </TextBlock.RenderTransform>
+                                        </TextBlock>
+                                    </Grid>
+                                    <TextBlock x:Name="CompactArtist" Text="Исполнитель" Foreground="#C4C4CC" FontSize="9.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="CompactSourceText" Text="Media" Foreground="#8C8C96" FontSize="8.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                                <StackPanel x:Name="PlaybackIndicatorCompact" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed">
+                                    <Rectangle Width="3" Height="9" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2,0">
+                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" From="7" To="14" Duration="0:0:0.45"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                    </Rectangle>
+                                    <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2,0">
+                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="6" To="16" Duration="0:0:0.5"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                    </Rectangle>
+                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF">
+                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="5" To="13" Duration="0:0:0.42"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                    </Rectangle>
+                                </StackPanel>
+
+                                <Grid x:Name="GifCompactContainer" Visibility="Collapsed" Width="50" Height="50">
+                                    <Ellipse Width="50" Height="50" Fill="#1AFFFFFF"/>
+                                    <Image x:Name="GifCompact" Width="42" Height="42" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                        <Image.Clip><EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/></Image.Clip>
+                                    </Image>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Grid.Row="1" Margin="14,0,14,6" VerticalAlignment="Bottom">
+                            <Rectangle x:Name="ProgressTrackCompact" Height="1.5" Fill="#28FFFFFF" RadiusX="0.75" RadiusY="0.75" HorizontalAlignment="Stretch"/>
+                            <Rectangle x:Name="ProgressBarCompact" Height="1.5" Fill="#EAF6FF" RadiusX="0.75" RadiusY="0.75" HorizontalAlignment="Left" Width="0">
+                                <Rectangle.Effect>
+                                    <DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#CCF5FAFF" Opacity="0.65"/>
+                                </Rectangle.Effect>
+                            </Rectangle>
+                            <Ellipse x:Name="ProgressDotCompact" Width="4" Height="4" Fill="#F8FCFF" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0"/>
+                        </Grid>
+                    </Grid>
+
+                    <Grid x:Name="ExpandedMode" Visibility="Collapsed" Margin="10,10,10,10">
+                        <Border CornerRadius="24" Background="#12000000" BorderBrush="#22FFFFFF" BorderThickness="1"/>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="12,12,12,6" ClipToBounds="True">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Grid x:Name="ExpandedContentOld" Grid.ColumnSpan="2" Opacity="0">
+                                    <Grid.RenderTransform><TranslateTransform x:Name="ExpandedOldTranslate"/></Grid.RenderTransform>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="68" Height="68" CornerRadius="18" Background="#1EFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                        <Image x:Name="AlbumArtExpandedOld" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="14" RadiusY="14"/></Image.Clip>
+                                        </Image>
+                                    </Border>
+                                    <StackPanel x:Name="ExpandedTextOldContainer" Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
+                                        <Grid ClipToBounds="True">
+                                            <TextBlock x:Name="TrackTitleOld" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="None" RenderTransformOrigin="0,0.5">
+                                                <TextBlock.RenderTransform>
+                                                    <TranslateTransform x:Name="TrackTitleOldTranslate"/>
+                                                </TextBlock.RenderTransform>
+                                            </TextBlock>
+                                        </Grid>
+                                        <TextBlock x:Name="ArtistNameOld" Foreground="#B6B6BF" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="ExpandedSourceTextOld" Text="Media" Foreground="#8C8C96" FontSize="9" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid x:Name="ExpandedContentNew" Grid.ColumnSpan="2" Opacity="1">
+                                    <Grid.RenderTransform><TranslateTransform x:Name="ExpandedNewTranslate"/></Grid.RenderTransform>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="68" Height="68" CornerRadius="18" Background="#1EFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                        <Image x:Name="AlbumArtExpanded" Width="60" Height="60" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="14" RadiusY="14"/></Image.Clip>
+                                            <Image.RenderTransform><RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/></Image.RenderTransform>
+                                        </Image>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
+                                        <Grid ClipToBounds="True">
+                                            <TextBlock x:Name="TrackTitle" Text="Название трека" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="None" RenderTransformOrigin="0,0.5">
+                                                <TextBlock.RenderTransform>
+                                                    <TranslateTransform x:Name="TrackTitleTranslate"/>
+                                                </TextBlock.RenderTransform>
+                                            </TextBlock>
+                                        </Grid>
+                                        <TextBlock x:Name="ArtistName" Text="Исполнитель" Foreground="#B6B6BF" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="ExpandedSourceText" Text="Media" Foreground="#8C8C96" FontSize="9" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="10,2,0,0">
+                                    <StackPanel x:Name="PlaybackIndicatorExpanded" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed">
+                                        <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" Margin="0,0,2,0">
+                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" From="7" To="15" Duration="0:0:0.45"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                        </Rectangle>
+                                        <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#57C767" Margin="0,0,2,0">
+                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="6" To="17" Duration="0:0:0.5"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                        </Rectangle>
+                                        <Rectangle Width="3" Height="11" RadiusX="1.5" RadiusY="1.5" Fill="#7AF08A">
+                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="5" To="14" Duration="0:0:0.42"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                        </Rectangle>
+                                    </StackPanel>
+
+                                    <Grid x:Name="GifExpandedContainer" Visibility="Collapsed" Width="42" Height="42">
+                                        <Ellipse Width="42" Height="42" Fill="#1AFFFFFF"/>
+                                        <Image x:Name="GifExpanded" Width="36" Height="36" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                            <Image.Clip><EllipseGeometry Center="18,18" RadiusX="18" RadiusY="18"/></Image.Clip>
+                                        </Image>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Grid.Row="1" Margin="14,0,14,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock x:Name="CurrentTimeText" Grid.Column="0" Text="0:00" Foreground="#A8A8B2" FontSize="9.5" VerticalAlignment="Center"/>
+                                <Grid Grid.Column="1" Margin="10,0">
+                                    <Rectangle x:Name="ProgressTrackExpanded" Height="2" Fill="#24FFFFFF" RadiusX="1" RadiusY="1" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                    <Rectangle x:Name="ProgressBarExpanded" Height="2" Fill="#FFFFFF" RadiusX="1" RadiusY="1" HorizontalAlignment="Left" Width="0" VerticalAlignment="Center">
+                                        <Rectangle.Effect>
+                                            <DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#80FFFFFF" Opacity="0.55"/>
+                                        </Rectangle.Effect>
+                                    </Rectangle>
+                                    <Ellipse x:Name="ProgressDotExpanded" Width="5" Height="5" Fill="#FFFFFF" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0"/>
+                                </Grid>
+                                <TextBlock x:Name="TotalTimeText" Grid.Column="2" Text="-0:00" Foreground="#A8A8B2" FontSize="9.5" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Grid Grid.Row="2" Margin="14,0,14,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Button x:Name="FavoriteButton" Grid.Column="0" Content="☆" Width="26" Height="26" FontSize="14"
+                                        Background="Transparent" BorderThickness="0" Foreground="#C7C7D0" Opacity="0.72"/>
+
+                                <StackPanel x:Name="ExpandedControlsRow" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Opacity="0.86">
+                                    <Button x:Name="PrevButton" Content="⏮" Style="{StaticResource ControlButtonStyle}" Click="PrevButton_Click" Margin="0,0,8,0"/>
+                                    <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource ControlButtonStyle}" Click="PlayPauseButton_Click" Width="34" Height="34" FontSize="13" Margin="0,0,8,0"/>
+                                    <Button x:Name="NextButton" Content="⏭" Style="{StaticResource ControlButtonStyle}" Click="NextButton_Click"/>
+                                </StackPanel>
+
+                                <Button x:Name="OutputButton" Grid.Column="2" Content="◔" Width="26" Height="26" FontSize="12"
+                                        Background="Transparent" BorderThickness="0" Foreground="#C7C7D0" Opacity="0.72"/>
+                            </Grid>
+                        </Grid>
+                        <Grid.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="ExpandedControlsRow" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18"/>
+                                        <DoubleAnimation Storyboard.TargetName="FavoriteButton" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18"/>
+                                        <DoubleAnimation Storyboard.TargetName="OutputButton" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="ExpandedControlsRow" Storyboard.TargetProperty="Opacity" To="0.86" Duration="0:0:0.18"/>
+                                        <DoubleAnimation Storyboard.TargetName="FavoriteButton" Storyboard.TargetProperty="Opacity" To="0.72" Duration="0:0:0.18"/>
+                                        <DoubleAnimation Storyboard.TargetName="OutputButton" Storyboard.TargetProperty="Opacity" To="0.72" Duration="0:0:0.18"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Grid.Triggers>
+                    </Grid>
                 </Grid>
             </Grid>
-            
-            <!-- Расширенный режим -->
-            <Grid x:Name="ExpandedMode" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="6"/>
-                </Grid.RowDefinitions>
-
-                <Grid Grid.Row="0" ClipToBounds="True">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Слайд-контейнер: старый контент -->
-                    <Grid x:Name="ExpandedContentOld" Grid.Column="0" Opacity="1">
-                        <Grid.RenderTransform><TranslateTransform x:Name="ExpandedOldTranslate"/></Grid.RenderTransform>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid Grid.Column="0" Margin="5,0,0,0">
-                            <Ellipse Width="50" Height="50" Fill="Gray"/>
-                            <Image x:Name="AlbumArtExpandedOld" Width="40" Height="40" Stretch="UniformToFill">
-                                <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                            </Image>
-                        </Grid>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
-                            <TextBlock x:Name="TrackTitleOld" Foreground="White" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="ArtistNameOld" Foreground="#AAAAAA" FontSize="10" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Слайд-контейнер: новый контент -->
-                    <Grid x:Name="ExpandedContentNew" Grid.Column="0" Opacity="1">
-                        <Grid.RenderTransform><TranslateTransform x:Name="ExpandedNewTranslate"/></Grid.RenderTransform>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid Grid.Column="0" Margin="5,0,0,0">
-                            <Ellipse Width="50" Height="50" Fill="Gray"/>
-                            <Image x:Name="AlbumArtExpanded" Width="40" Height="40" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
-                                <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                                <Image.RenderTransform><RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/></Image.RenderTransform>
-                            </Image>
-                        </Grid>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
-                            <TextBlock x:Name="TrackTitle" Text="Название трека" Foreground="White" FontSize="12" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="ArtistName" Text="Исполнитель" Foreground="#AAAAAA" FontSize="10" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <Grid Grid.Column="1" x:Name="GifExpandedContainer" Visibility="Collapsed" Margin="0,0,5,0" Width="50" Height="50">
-                        <Ellipse Width="50" Height="50" Fill="Gray"/>
-                        <Image x:Name="GifExpanded" Width="40" Height="40" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
-                            <Image.Clip><EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/></Image.Clip>
-                        </Image>
-                    </Grid>
-
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
-                        <Button x:Name="PrevButton" Content="⏮" Style="{StaticResource ControlButtonStyle}" Click="PrevButton_Click"/>
-                        <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource ControlButtonStyle}" Click="PlayPauseButton_Click"/>
-                        <Button x:Name="NextButton" Content="⏭" Style="{StaticResource ControlButtonStyle}" Click="NextButton_Click"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- Прогресс-бар -->
-                <Grid Grid.Row="1" Margin="8,0,8,1" VerticalAlignment="Bottom">
-                    <Rectangle x:Name="ProgressTrackExpanded" Height="2" Fill="#444444" RadiusX="1" RadiusY="1" HorizontalAlignment="Stretch"/>
-                    <Rectangle x:Name="ProgressBarExpanded" Height="2" Fill="White" RadiusX="1" RadiusY="1" HorizontalAlignment="Left" Width="0"/>
-                    <Ellipse x:Name="ProgressDotExpanded" Width="6" Height="6" Fill="White" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0"/>
-                </Grid>
-            </Grid>
-        </Grid>
         </Border>
     </Grid>
 </Window>

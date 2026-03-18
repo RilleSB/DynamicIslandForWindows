@@ -31,7 +31,10 @@ namespace DynamicIslandPC
                     SubscribeToSession(sessionManager.GetCurrentSession());
                     await FetchAndNotify();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Logger.Error("Failed to initialize SMTC session manager", ex);
+                }
             });
         }
 
@@ -93,6 +96,7 @@ namespace DynamicIslandPC
                 {
                     Title = props.Title,
                     Artist = props.Artist,
+                    SourceApp = MusicVisualHelper.NormalizeSource(session.SourceAppUserModelId),
                     IsPlaying = session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
                     Position = timeline?.Position ?? TimeSpan.Zero,
                     Duration = timeline?.EndTime ?? TimeSpan.Zero
@@ -111,12 +115,18 @@ namespace DynamicIslandPC
                         image.Freeze();
                         info.AlbumArt = image;
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Failed to load album art thumbnail", ex);
+                    }
                 }
 
                 return info;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to fetch current SMTC info", ex);
+            }
             return lastKnownInfo;
         }
 

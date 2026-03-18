@@ -7,7 +7,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
 using System.Windows.Threading;
 
 namespace DynamicIslandPC
@@ -16,19 +15,17 @@ namespace DynamicIslandPC
     {
         private int displayMode = 0; // 0=minimal, 1=compact, 2=expanded
         private MusicInfoService musicService;
-        private DispatcherTimer updateTimer;
-        private DebugWindow debugWindow;
         private MusicInfo lastMusicInfo = null;
-        private bool isFetchingMusic = false;
         private bool isPaused = false;
         private Storyboard rotationStoryboard;
         private int _slideDirection = -1;
-        private TrackNotificationWindow _notification;
-        private Storyboard glowStoryboard;
         private Storyboard _pauseInStoryboard;
         private Storyboard _pauseOutStoryboard;
         private DispatcherTimer _pauseDebounceTimer;
         private System.Windows.Forms.NotifyIcon trayIcon;
+        private Storyboard _revealStoryboard;
+        private Storyboard _compactMarqueeStoryboard;
+        private Storyboard _expandedMarqueeStoryboard;
         private bool isTopPosition = true;
         private double customX = -1;
         private double customY = -1;
@@ -57,10 +54,11 @@ namespace DynamicIslandPC
                 _settings = SettingsService.Load();
                 ApplySettings(_settings);
                 InitializeWindow();
+                ApplyIslandBackground(GetConfiguredBackgroundColor(), backgroundOpacity);
+                SetTheme(isDarkTheme, applyBackground: false);
                 InitializeMusicService();
                 RegisterGlobalHotkey();
                 InitializeTrayIcon();
-                StartGlowAnimation();
                 AnimateStartup();
                 Logger.Log("Application started successfully");
             }
@@ -69,25 +67,6 @@ namespace DynamicIslandPC
                 Logger.Error("Failed to start application", ex);
                 throw;
             }
-        }
-
-        private void ApplySettings(AppSettings s)
-        {
-            scale = s.Scale;
-            isTopPosition = s.IsTopPosition;
-            customX = s.CustomX;
-            customY = s.CustomY;
-            isDarkTheme = s.IsDarkTheme;
-        }
-
-        private void SaveSettings()
-        {
-            _settings.Scale = scale;
-            _settings.IsTopPosition = isTopPosition;
-            _settings.CustomX = customX;
-            _settings.CustomY = customY;
-            _settings.IsDarkTheme = isDarkTheme;
-            SettingsService.Save(_settings);
         }
 
         private void InitializeWindow()
@@ -161,16 +140,35 @@ namespace DynamicIslandPC
                 if (w <= 0) return;
                 var filled = w * ratio;
                 bar.Width = filled;
-                dot.Margin = new Thickness(Math.Max(0, filled - 3), 0, 0, 0);
+                dot.Margin = new Thickness(Math.Max(0, filled - (dot.Width / 2)), 0, 0, 0);
             }
             Apply(ProgressTrackCompact, ProgressBarCompact, ProgressDotCompact);
             Apply(ProgressTrackExpanded, ProgressBarExpanded, ProgressDotExpanded);
+
+            if (lastMusicInfo != null)
+            {
+                CurrentTimeText.Text = FormatTime(lastMusicInfo.Position);
+                var remaining = lastMusicInfo.Duration > TimeSpan.Zero
+                    ? lastMusicInfo.Duration - lastMusicInfo.Position
+                    : TimeSpan.Zero;
+                if (remaining < TimeSpan.Zero)
+                    remaining = TimeSpan.Zero;
+                TotalTimeText.Text = "-" + FormatTime(remaining);
+            }
+        }
+
+        private static string FormatTime(TimeSpan time)
+        {
+            if (time.TotalHours >= 1)
+                return time.ToString(@"h\:mm\:ss");
+            return time.ToString(@"m\:ss");
         }
 
         private void RegisterGlobalHotkey()
         {
             var helper = new System.Windows.Interop.WindowInteropHelper(this);
-            RegisterHotKey(helper.Handle, HOTKEY_ID, MOD_CONTROL, VK_SPACE);
+            if (!RegisterHotKey(helper.Handle, HOTKEY_ID, MOD_CONTROL, VK_SPACE))
+                Logger.Error("Failed to register global hotkey Ctrl+Space");
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -326,7 +324,7 @@ namespace DynamicIslandPC
             if (trackChanged)
             {
                 SlideContent(musicInfo);
-                ShowTrackNotification(musicInfo.Artist, musicInfo.Title);
+                TrackRevealOverlay.Visibility = Visibility.Collapsed;
             }
             else
             {
@@ -339,6 +337,10 @@ namespace DynamicIslandPC
                 AlbumArtExpanded.Source = musicInfo.AlbumArt;
             }
 
+            AlbumArtPaused.Source = musicInfo.AlbumArt;
+            CompactSourceText.Text = musicInfo.SourceApp ?? "Media";
+            ExpandedSourceText.Text = musicInfo.SourceApp ?? "Media";
+            UpdateAlbumAccent(MusicVisualHelper.GetAccentColor(musicInfo.AlbumArt));
             lastMusicInfo = musicInfo;
 
             // Первый запуск без музыки — сразу PausedMode
@@ -357,13 +359,27 @@ namespace DynamicIslandPC
             GifMinimalContainer.Visibility = gifVisible;
             GifCompactContainer.Visibility = gifVisible;
             GifExpandedContainer.Visibility = gifVisible;
-            
-            if (!musicInfo.IsPlaying) StopRotation();
-            
+            PlaybackIndicatorMinimal.Visibility = gifVisible;
+            PlaybackIndicatorCompact.Visibility = gifVisible;
+            PlaybackIndicatorExpanded.Visibility = gifVisible;
+
+            if (musicInfo.IsPlaying)
+            {
+                StartRotation();
+                PulseAlbumArt();
+                SetProgressGlowStrength(0.9);
+            }
+            else
+            {
+                StopRotation();
+                SetProgressGlowStrength(0.45);
+            }
+
             PlayPauseButton.Content = musicInfo.IsPlaying ? "⏸" : "▶";
             this.Title = $"Dynamic Island PC - {musicInfo.Title} - {musicInfo.Artist}";
-            
-            // Переключаем режим паузы
+            UpdateTitleMarquee();
+
+            // РџРµСЂРµРєР»СЋС‡Р°РµРј СЂРµР¶РёРј РїР°СѓР·С‹
             if (!musicInfo.IsPlaying && !isPaused)
             {
                 _pauseDebounceTimer?.Stop();
@@ -393,17 +409,10 @@ namespace DynamicIslandPC
         
         private (double width, double height) GetModeSize(int mode) => mode switch
         {
-            0 => (115, 60),
+            0 => (138, 60),
             1 => (335, 70),
-            _ => (535, 110)
+            _ => (500, 176)
         };
-
-        private double GetTargetLeft(double targetWidth)
-        {
-            if (customX >= 0)
-                return customX - targetWidth / 2;
-            return (SystemParameters.PrimaryScreenWidth - targetWidth) / 2;
-        }
 
         private void AnimateToPaused()
         {
@@ -496,16 +505,118 @@ namespace DynamicIslandPC
             PausedMode.BeginAnimation(OpacityProperty, fadeOut);
         }
 
-        private void ShowTrackNotification(string artist, string title)
+
+        private void ShowTrackReveal(MusicInfo info)
         {
-            var text = $"{artist} — {title}";
-            if (_notification != null && _notification.IsLoaded)
+            RevealAlbumArt.Source = info.AlbumArt;
+            RevealTitleText.Text = info.Title ?? "Unknown track";
+            bool detailedReveal = displayMode == 2;
+            RevealSubtitleText.Visibility = detailedReveal ? Visibility.Visible : Visibility.Collapsed;
+            RevealSubtitleText.Text = detailedReveal
+                ? (string.IsNullOrWhiteSpace(info.SourceApp)
+                    ? (info.Artist ?? "Unknown artist")
+                    : $"{info.Artist ?? "Unknown artist"} · {info.SourceApp}")
+                : (info.Artist ?? info.SourceApp ?? string.Empty);
+
+            _revealStoryboard?.Stop();
+            TrackRevealOverlay.Visibility = Visibility.Visible;
+            TrackRevealOverlay.Opacity = 0;
+            TrackRevealOverlay.RenderTransform = new TranslateTransform(0, 6);
+
+            _revealStoryboard = new Storyboard();
+            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180));
+            var hold = new DoubleAnimation(1, 1, TimeSpan.FromMilliseconds(900)) { BeginTime = TimeSpan.FromMilliseconds(180) };
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(1080) };
+            var slideIn = new DoubleAnimation(6, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+            var slideOut = new DoubleAnimation(0, -4, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(1080), EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } };
+            fadeOut.Completed += (_, __) => TrackRevealOverlay.Visibility = Visibility.Collapsed;
+
+            Storyboard.SetTarget(fadeIn, TrackRevealOverlay);
+            Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
+            Storyboard.SetTarget(hold, TrackRevealOverlay);
+            Storyboard.SetTargetProperty(hold, new PropertyPath("Opacity"));
+            Storyboard.SetTarget(fadeOut, TrackRevealOverlay);
+            Storyboard.SetTargetProperty(fadeOut, new PropertyPath("Opacity"));
+            Storyboard.SetTarget(slideIn, TrackRevealOverlay);
+            Storyboard.SetTargetProperty(slideIn, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
+            Storyboard.SetTarget(slideOut, TrackRevealOverlay);
+            Storyboard.SetTargetProperty(slideOut, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
+
+            _revealStoryboard.Children.Add(fadeIn);
+            _revealStoryboard.Children.Add(hold);
+            _revealStoryboard.Children.Add(fadeOut);
+            _revealStoryboard.Children.Add(slideIn);
+            _revealStoryboard.Children.Add(slideOut);
+            _revealStoryboard.Begin();
+        }
+
+        private void PulseAlbumArt()
+        {
+            void ApplyPulse(UIElement element)
             {
-                _notification.UpdateText(text, Left, Top, Width, Height);
-                return;
+                element.RenderTransformOrigin = new Point(0.5, 0.5);
+                if (element.RenderTransform is not ScaleTransform scale)
+                {
+                    scale = new ScaleTransform(1, 1);
+                    element.RenderTransform = scale;
+                }
+
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+
+                var pulseX = new DoubleAnimationUsingKeyFrames();
+                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(140))));
+                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(320))));
+
+                var pulseY = pulseX.Clone();
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulseX);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulseY);
             }
-            _notification = new TrackNotificationWindow(text, Left, Top, Width, Height);
-            _notification.Show();
+
+            ApplyPulse(AlbumArtMinimal);
+            ApplyPulse(AlbumArt);
+            ApplyPulse(AlbumArtExpanded);
+        }
+
+        private void SetProgressGlowStrength(double opacity)
+        {
+            if (ProgressBarCompact.Effect is System.Windows.Media.Effects.DropShadowEffect compactGlow)
+                compactGlow.Opacity = opacity * 0.65;
+            if (ProgressBarExpanded.Effect is System.Windows.Media.Effects.DropShadowEffect expandedGlow)
+                expandedGlow.Opacity = opacity * 0.55;
+        }
+
+        private void UpdateTitleMarquee()
+        {
+            UpdateSingleMarquee(CompactTitle, CompactTitleTranslate, ref _compactMarqueeStoryboard, 124);
+            UpdateSingleMarquee(TrackTitle, TrackTitleTranslate, ref _expandedMarqueeStoryboard, 246);
+            CompactTitleOldTranslate.X = 0;
+            TrackTitleOldTranslate.X = 0;
+        }
+
+        private void UpdateSingleMarquee(TextBlock textBlock, TranslateTransform translate, ref Storyboard storyboard, double visibleWidth)
+        {
+            storyboard?.Stop();
+            translate.X = 0;
+
+            var estimatedWidth = (textBlock.Text?.Length ?? 0) * textBlock.FontSize * 0.58;
+            if (estimatedWidth <= visibleWidth + 18)
+                return;
+
+            var shift = Math.Min(estimatedWidth - visibleWidth + 12, visibleWidth * 0.85);
+            storyboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever };
+            var animation = new DoubleAnimationUsingKeyFrames();
+            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100))));
+            animation.KeyFrames.Add(new EasingDoubleKeyFrame(-shift, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(3900))) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } });
+            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(-shift, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(5100))));
+            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(5110))));
+
+            Storyboard.SetTarget(animation, translate);
+            Storyboard.SetTargetProperty(animation, new PropertyPath(TranslateTransform.XProperty));
+            storyboard.Children.Add(animation);
+            storyboard.Begin();
         }
 
         private void StartRotation()
@@ -544,20 +655,43 @@ namespace DynamicIslandPC
                 AlbumArtExpandedRotation.Angle = 0;
             }
         }
+
+        private static void StopSlideAnimations(TranslateTransform oldTransform, TranslateTransform newTransform)
+        {
+            oldTransform.BeginAnimation(TranslateTransform.XProperty, null);
+            newTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        }
+
+        private static void ResetSlideLayerState(Grid oldLayer, Grid newLayer, TranslateTransform oldTransform, TranslateTransform newTransform)
+        {
+            StopSlideAnimations(oldTransform, newTransform);
+            oldTransform.X = 0;
+            newTransform.X = 0;
+            oldLayer.Opacity = 0;
+            newLayer.Opacity = 1;
+        }
         
         private void SlideContent(MusicInfo info)
         {
             var dur = TimeSpan.FromMilliseconds(350);
             var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
-            double offset = _slideDirection * Width;
+            var compactOffset = _slideDirection * Math.Max(CompactMode.ActualWidth, 1);
+            var expandedOffset = _slideDirection * Math.Max(ExpandedMode.ActualWidth, 1);
+
+            ResetSlideLayerState(CompactContentOld, CompactContentNew, CompactOldTranslate, CompactNewTranslate);
+            ResetSlideLayerState(ExpandedContentOld, ExpandedContentNew, ExpandedOldTranslate, ExpandedNewTranslate);
 
             // Заполняем старый контент текущими данными
             AlbumArtOld.Source = AlbumArt.Source;
             AlbumArtExpandedOld.Source = AlbumArtExpanded.Source;
             CompactTitleOld.Text = CompactTitle.Text;
             CompactArtistOld.Text = CompactArtist.Text;
+            CompactSourceTextOld.Text = CompactSourceText.Text;
             TrackTitleOld.Text = TrackTitle.Text;
             ArtistNameOld.Text = ArtistName.Text;
+            ExpandedSourceTextOld.Text = ExpandedSourceText.Text;
+            CompactTextOldContainer.Opacity = 0;
+            ExpandedTextOldContainer.Opacity = 0;
 
             // Заполняем новый контент
             AlbumArt.Source = info.AlbumArt;
@@ -568,22 +702,34 @@ namespace DynamicIslandPC
             TrackTitle.Text = info.Title ?? "Неизвестный трек";
             ArtistName.Text = info.Artist ?? "Неизвестный исполнитель";
 
-            void Slide(TranslateTransform oldT, TranslateTransform newT)
+            void Slide(Grid oldLayer, Grid newLayer, TranslateTransform oldTransform, TranslateTransform newTransform, double offset)
             {
-                // Старый уезжает в направлении слайда
-                oldT.X = 0;
-                newT.X = -offset; // новый стартует с противоположной стороны
+                if (Math.Abs(offset) < 1)
+                {
+                    ResetSlideLayerState(oldLayer, newLayer, oldTransform, newTransform);
+                    return;
+                }
 
-                var slideOut = new DoubleAnimation(0, offset, dur) { EasingFunction = ease };
-                var slideIn  = new DoubleAnimation(-offset, 0, dur) { EasingFunction = ease };
-                oldT.BeginAnimation(TranslateTransform.XProperty, slideOut);
-                newT.BeginAnimation(TranslateTransform.XProperty, slideIn);
+                oldLayer.Opacity = 1;
+                newLayer.Opacity = 1;
+                oldTransform.X = 0;
+                newTransform.X = 0;
+                CompactTextOldContainer.Opacity = 0;
+                ExpandedTextOldContainer.Opacity = 0;
+
+                var fadeOut = new DoubleAnimation(1, 0, dur) { EasingFunction = ease };
+                var fadeIn = new DoubleAnimation(0.55, 1, dur) { EasingFunction = ease };
+                fadeIn.Completed += (_, __) => ResetSlideLayerState(oldLayer, newLayer, oldTransform, newTransform);
+
+                oldTransform.BeginAnimation(TranslateTransform.XProperty, null);
+                newTransform.BeginAnimation(TranslateTransform.XProperty, null);
+                oldLayer.BeginAnimation(OpacityProperty, fadeOut);
+                newLayer.BeginAnimation(OpacityProperty, fadeIn);
             }
 
-            Slide(CompactOldTranslate, CompactNewTranslate);
-            Slide(ExpandedOldTranslate, ExpandedNewTranslate);
+            Slide(CompactContentOld, CompactContentNew, CompactOldTranslate, CompactNewTranslate, compactOffset);
+            Slide(ExpandedContentOld, ExpandedContentNew, ExpandedOldTranslate, ExpandedNewTranslate, expandedOffset);
         }
-
         private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
         {
             musicService.TogglePlayPause();
@@ -658,103 +804,7 @@ namespace DynamicIslandPC
                 Application.Current.Shutdown();
             });
             trayIcon.ContextMenuStrip = contextMenu;
-        }
-        
-        private void SetPosition(bool top)
-        {
-            isTopPosition = top;
-            customX = -1;
-            customY = -1;
-            AnimateToMode();
-            SaveSettings();
-            var menu = (System.Windows.Forms.ToolStripMenuItem)trayIcon.ContextMenuStrip.Items[0];
-            ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[0]).Checked = top;
-            ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[1]).Checked = !top;
-        }
-        
-        private void UpdateWindowPosition()
-        {
-            if (customX >= 0 && customY >= 0)
-            {
-                Left = customX - Width / 2;
-                Top = customY;
-            }
-            else
-            {
-                Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
-                Top = isTopPosition ? 20 : SystemParameters.PrimaryScreenHeight - Height - 60;
-            }
-        }
-        
-        private void OpenSettings()
-        {
-            var currentX = customX >= 0 ? customX : Left + Width / 2;
-            var currentY = customY >= 0 ? customY : Top;
-            
-            var settingsWindow = new SettingsWindow(currentX, currentY, 
-                (x, y) => {
-                    customX = x;
-                    customY = y;
-                    AnimateToMode();
-                },
-                (color) => {
-                    ((SolidColorBrush)IslandBorder.Background).Color = color;
-                    Logger.Log($"Background color changed to {color}");
-                });
-            settingsWindow.ShowDialog();
-        }
-        
-        private void SetTheme(bool dark)
-        {
-            isDarkTheme = dark;
-            var color = dark ? Color.FromRgb(0, 0, 0) : Color.FromRgb(255, 255, 255);
-            ((SolidColorBrush)IslandBorder.Background).Color = color;
-            
-            var textColor = dark ? Brushes.White : Brushes.Black;
-            var subTextColor = dark ? new SolidColorBrush(Color.FromRgb(170, 170, 170)) : new SolidColorBrush(Color.FromRgb(100, 100, 100));
-            
-            TrackTitle.Foreground = textColor;
-            ArtistName.Foreground = subTextColor;
-            CompactTitle.Foreground = textColor;
-            CompactArtist.Foreground = subTextColor;
-            
-            var menu = (System.Windows.Forms.ToolStripMenuItem)trayIcon.ContextMenuStrip.Items[1];
-            ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[0]).Checked = dark;
-            ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[1]).Checked = !dark;
-            
-            SaveSettings();
-            Logger.Log($"Theme changed to {(dark ? "dark" : "light")}");
-        }
-        
-        private void SetScale(double newScale)
-        {
-            scale = newScale;
-            
-            var (baseWidth, baseHeight) = GetModeSize(displayMode);
-            Width = baseWidth * scale;
-            Height = baseHeight * scale;
-            UpdateWindowPosition();
-            
-            var menu = (System.Windows.Forms.ToolStripMenuItem)trayIcon.ContextMenuStrip.Items[2];
-            for (int i = 0; i < menu.DropDownItems.Count; i++)
-            {
-                ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[i]).Checked = false;
-            }
-            
-            if (Math.Abs(newScale - 1.0) < 0.01)
-                ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[0]).Checked = true;
-            else if (Math.Abs(newScale - 1.25) < 0.01)
-                ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[1]).Checked = true;
-            else if (Math.Abs(newScale - 1.5) < 0.01)
-                ((System.Windows.Forms.ToolStripMenuItem)menu.DropDownItems[2]).Checked = true;
-            
-            SaveSettings();
-            Logger.Log($"Scale changed to {(int)(newScale * 100)}%");
-        }
-        
-        private void StartGlowAnimation()
-        {
-            // Свечение отключено
+            SyncTrayMenuState();
         }
         
         private void AnimateStartup()
@@ -802,9 +852,12 @@ namespace DynamicIslandPC
             _progressTimer?.Stop();
             _pauseDebounceTimer?.Stop();
             SaveSettings();
-            updateTimer?.Stop();
             trayIcon?.Dispose();
             base.OnClosed(e);
         }
     }
 }
+
+
+
+

@@ -1,10 +1,12 @@
 using System;
 using System.IO;
+using System.Text;
 
 namespace DynamicIslandPC
 {
     public static class Logger
     {
+        private static readonly object SyncRoot = new();
         private static readonly string LogPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "DynamicIslandPC",
@@ -27,7 +29,10 @@ namespace DynamicIslandPC
             try
             {
                 var logMessage = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}";
-                File.AppendAllText(LogPath, logMessage + Environment.NewLine);
+                lock (SyncRoot)
+                {
+                    File.AppendAllText(LogPath, logMessage + Environment.NewLine, Encoding.UTF8);
+                }
             }
             catch { }
         }

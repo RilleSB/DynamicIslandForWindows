@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Forms;
 
 namespace DynamicIslandPC
 {
@@ -11,15 +12,20 @@ namespace DynamicIslandPC
         private bool isUpdating = false;
         private Action<double, double> onPositionChanged;
         private Action<Color> onColorChanged;
+        private Screen currentScreen;
 
         public SettingsWindow(double currentX, double currentY, Action<double, double> positionChangedCallback, Action<Color> colorChangedCallback = null)
         {
             InitializeComponent();
             onPositionChanged = positionChangedCallback;
             onColorChanged = colorChangedCallback;
-            
-            SliderX.Maximum = SystemParameters.PrimaryScreenWidth;
-            SliderY.Maximum = SystemParameters.PrimaryScreenHeight;
+
+            currentScreen = Screen.FromPoint(new System.Drawing.Point((int)Math.Round(currentX), (int)Math.Round(currentY)));
+            var workingArea = currentScreen.WorkingArea;
+            SliderX.Minimum = workingArea.Left;
+            SliderX.Maximum = workingArea.Right;
+            SliderY.Minimum = workingArea.Top;
+            SliderY.Maximum = workingArea.Bottom;
             
             PositionX = currentX;
             PositionY = currentY;
@@ -79,19 +85,22 @@ namespace DynamicIslandPC
 
         private void CenterButton_Click(object sender, RoutedEventArgs e)
         {
-            SliderX.Value = SystemParameters.PrimaryScreenWidth / 2;
+            var workingArea = currentScreen.WorkingArea;
+            SliderX.Value = workingArea.Left + (workingArea.Width / 2.0);
         }
 
         private void TopButton_Click(object sender, RoutedEventArgs e)
         {
-            SliderX.Value = SystemParameters.PrimaryScreenWidth / 2;
-            SliderY.Value = 20;
+            var workingArea = currentScreen.WorkingArea;
+            SliderX.Value = workingArea.Left + (workingArea.Width / 2.0);
+            SliderY.Value = workingArea.Top + 20;
         }
 
         private void BottomButton_Click(object sender, RoutedEventArgs e)
         {
-            SliderX.Value = SystemParameters.PrimaryScreenWidth / 2;
-            SliderY.Value = SystemParameters.PrimaryScreenHeight - 120;
+            var workingArea = currentScreen.WorkingArea;
+            SliderX.Value = workingArea.Left + (workingArea.Width / 2.0);
+            SliderY.Value = workingArea.Bottom - 120;
         }
 
         private void ColorButton_Click(object sender, RoutedEventArgs e)

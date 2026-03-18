@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using System.Windows.Forms;
 
 namespace DynamicIslandPC
 {
@@ -28,10 +29,22 @@ namespace DynamicIslandPC
             ResetTimer();
         }
 
+        public void UpdateOwnerBounds(double ownerLeft, double ownerTop, double ownerWidth, double ownerHeight)
+        {
+            UpdatePosition(ownerLeft, ownerTop, ownerWidth, ownerHeight);
+        }
+
         private void UpdatePosition(double ownerLeft, double ownerTop, double ownerWidth, double ownerHeight)
         {
-            Left = ownerLeft + ownerWidth / 2 - ActualWidth / 2;
-            Top = ownerTop + ownerHeight + 8;
+            var centerX = ownerLeft + ownerWidth / 2;
+            var desiredLeft = centerX - ActualWidth / 2;
+            var desiredTop = ownerTop + ownerHeight + 14;
+
+            var screen = Screen.FromPoint(new System.Drawing.Point((int)Math.Round(centerX), (int)Math.Round(desiredTop)));
+            var workingArea = screen.WorkingArea;
+
+            Left = Math.Clamp(desiredLeft, workingArea.Left + 8, workingArea.Right - ActualWidth - 8);
+            Top = Math.Clamp(desiredTop, workingArea.Top + 8, workingArea.Bottom - ActualHeight - 8);
         }
 
         private void FadeIn()

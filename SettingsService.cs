@@ -11,6 +11,8 @@ namespace DynamicIslandPC
         public bool IsTopPosition { get; set; } = true;
         public bool IsDarkTheme { get; set; } = true;
         public double Scale { get; set; } = 1.0;
+        public string BackgroundColor { get; set; } = "#FF000000";
+        public double BackgroundOpacity { get; set; } = 0.7;
     }
 
     public static class SettingsService
@@ -26,7 +28,10 @@ namespace DynamicIslandPC
                 if (File.Exists(_path))
                     return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_path)) ?? new AppSettings();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to load settings", ex);
+            }
             return new AppSettings();
         }
 
@@ -37,7 +42,10 @@ namespace DynamicIslandPC
                 Directory.CreateDirectory(Path.GetDirectoryName(_path));
                 File.WriteAllText(_path, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to save settings", ex);
+            }
         }
     }
 }

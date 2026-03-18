@@ -13,6 +13,8 @@
                    Foreground="White"
                    FontSize="13"
                    FontFamily="Segoe UI"
+                   TextTrimming="CharacterEllipsis"
+                   MaxWidth="280"
                    VerticalAlignment="Center"/>
     </Border>
 </Window>

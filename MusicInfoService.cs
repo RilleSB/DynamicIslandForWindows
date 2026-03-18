@@ -10,6 +10,7 @@ namespace DynamicIslandPC
     {
         public string Title { get; set; }
         public string Artist { get; set; }
+        public string SourceApp { get; set; }
         public BitmapImage AlbumArt { get; set; }
         public bool IsPlaying { get; set; }
         public TimeSpan Position { get; set; }
@@ -88,8 +89,9 @@ namespace DynamicIslandPC
                 
                 return bitmapImage;
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.Error("Failed to create default album art", ex);
                 return null;
             }
         }
