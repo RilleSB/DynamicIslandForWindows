@@ -1,3 +1,4 @@
+ENG
 # DynamicIslandPC
 
 A Dynamic Island-style music widget for Windows.
@@ -31,6 +32,7 @@ Works with any player that supports Windows SMTC (System Media Transport Control
 - Windows Media Player
 - and more
 
+RUS
 # DynamicIslandPC
 
 Виджет для Windows в стиле Dynamic Island, отображающий информацию о музыке.
