@@ -5,3 +5,15 @@ obj/
 Release-Build/
 Release-Final/
 .amazonq/
+
+# Large binary files
+*.exe
+*.pdb
+*.apk
+
+# Publish directories
+publish/
+publish-small/
+Release-Single/
+Release-Single-NoRuntime/
+android-apk/
