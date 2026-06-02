@@ -16,4 +16,7 @@ publish/
 publish-small/
 Release-Single/
 Release-Single-NoRuntime/
+
+# Android build outputs
 android-apk/
+android/app/build/
