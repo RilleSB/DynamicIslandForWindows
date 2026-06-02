@@ -22,6 +22,9 @@ namespace DynamicIslandPC
             isDarkTheme = s.IsDarkTheme;
             backgroundColorHex = string.IsNullOrWhiteSpace(s.BackgroundColor) ? "#FF000000" : s.BackgroundColor;
             backgroundOpacity = Math.Clamp(s.BackgroundOpacity, 0.1, 1.0);
+            decorationEnabled = s.DecorationEnabled;
+            decorationMediaPath = s.DecorationMediaPath ?? string.Empty;
+            gamingModeEnabled = s.GamingModeEnabled;
         }
 
         private void SaveSettings()
@@ -33,6 +36,9 @@ namespace DynamicIslandPC
             _settings.IsDarkTheme = isDarkTheme;
             _settings.BackgroundColor = backgroundColorHex;
             _settings.BackgroundOpacity = backgroundOpacity;
+            _settings.DecorationEnabled = decorationEnabled;
+            _settings.DecorationMediaPath = decorationMediaPath ?? string.Empty;
+            _settings.GamingModeEnabled = gamingModeEnabled;
             SettingsService.Save(_settings);
         }
 
@@ -143,27 +149,50 @@ namespace DynamicIslandPC
 
         private void OpenSettings()
         {
-            var currentX = customX >= 0 ? customX : Left + Width / 2;
-            var currentY = customY >= 0 ? customY : Top;
+            try
+            {
+                var currentX = customX >= 0 ? customX : Left + Width / 2;
+                var currentY = customY >= 0 ? customY : Top;
 
-            var settingsWindow = new SettingsWindow(
-                currentX,
-                currentY,
-                (x, y) =>
-                {
-                    customX = x;
-                    customY = y;
-                    AnimateToMode();
-                    SaveSettings();
-                },
-                color =>
-                {
-                    ApplyIslandBackground(color, backgroundOpacity);
-                    SaveSettings();
-                    Logger.Log($"Background color changed to {color}");
-                });
+                var settingsWindow = new SettingsWindow(
+                    currentX,
+                    currentY,
+                    _settings,
+                    (x, y) =>
+                    {
+                        customX = x;
+                        customY = y;
+                        AnimateToMode();
+                        SaveSettings();
+                    },
+                    dark =>
+                    {
+                        SetTheme(dark);
+                    },
+                    (color, opacity) =>
+                    {
+                        ApplyIslandBackground(color, opacity);
+                        UpdateAlbumAccent(albumAccentColor);
+                        SaveSettings();
+                        Logger.Log($"Background changed to {color} with opacity {opacity:0.00}");
+                    },
+                    (enabled, mediaPath) =>
+                    {
+                        SetDecoration(enabled, mediaPath);
+                    });
 
-            settingsWindow.ShowDialog();
+                settingsWindow.Owner = this;
+                settingsWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to open settings window", ex);
+                System.Windows.MessageBox.Show(
+                    "Не получилось открыть настройки. Я записал ошибку в лог.",
+                    "Dynamic Island PC",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+            }
         }
 
         private void SetTheme(bool dark, bool applyBackground = true)
@@ -200,6 +229,8 @@ namespace DynamicIslandPC
             TotalTimeText.Foreground = dark ? new SolidColorBrush(Color.FromRgb(168, 168, 178)) : new SolidColorBrush(Color.FromRgb(96, 96, 104));
             FavoriteButton.Foreground = dark ? new SolidColorBrush(Color.FromRgb(199, 199, 208)) : new SolidColorBrush(Color.FromRgb(48, 48, 54));
             OutputButton.Foreground = dark ? new SolidColorBrush(Color.FromRgb(199, 199, 208)) : new SolidColorBrush(Color.FromRgb(48, 48, 54));
+            if (lastMusicInfo != null)
+                ApplySourceVisuals(lastMusicInfo.SourceApp);
 
             SyncTrayMenuState();
             SaveSettings();
@@ -218,6 +249,49 @@ namespace DynamicIslandPC
             SyncTrayMenuState();
             SaveSettings();
             Logger.Log($"Scale changed to {(int)(newScale * 100)}%");
+        }
+
+        private void SetDecoration(bool enabled, string mediaPath)
+        {
+            decorationEnabled = enabled;
+            decorationMediaPath = mediaPath ?? string.Empty;
+            ApplyDecorationMedia();
+            UpdateDecorationVisibility(lastMusicInfo?.IsPlaying == true);
+            SaveSettings();
+            Logger.Log(string.IsNullOrWhiteSpace(decorationMediaPath)
+                ? $"Decoration {(enabled ? "enabled" : "disabled")} with default media"
+                : $"Decoration {(enabled ? "enabled" : "disabled")} with {decorationMediaPath}");
+        }
+
+        private void SetGamingMode(bool enabled)
+        {
+            gamingModeEnabled = enabled;
+            ApplyClickThroughMode();
+            SyncTrayMenuState();
+            SaveSettings();
+            Logger.Log($"Gaming mode {(gamingModeEnabled ? "enabled" : "disabled")}");
+        }
+
+        private void ApplyClickThroughMode()
+        {
+            try
+            {
+                var helper = new System.Windows.Interop.WindowInteropHelper(this);
+                if (helper.Handle == IntPtr.Zero)
+                    return;
+
+                var style = GetWindowLong(helper.Handle, GWL_EXSTYLE);
+                var newStyle = gamingModeEnabled
+                    ? style | WS_EX_TRANSPARENT
+                    : style & ~WS_EX_TRANSPARENT;
+
+                if (newStyle != style)
+                    SetWindowLong(helper.Handle, GWL_EXSTYLE, newStyle);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to apply click-through gaming mode", ex);
+            }
         }
 
         private void SyncTrayMenuState()
@@ -250,6 +324,9 @@ namespace DynamicIslandPC
                 else if (Math.Abs(scale - 1.5) < 0.01)
                     ((ToolStripMenuItem)scaleMenu.DropDownItems[2]).Checked = true;
             }
+
+            if (trayIcon.ContextMenuStrip.Items[3] is ToolStripMenuItem gamingItem)
+                gamingItem.Checked = gamingModeEnabled;
         }
 
         private static Color MixBaseAndAccent(Color baseColor, Color accentColor, double accentAmount)

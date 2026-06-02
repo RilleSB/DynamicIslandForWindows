@@ -86,10 +86,26 @@ namespace DynamicIslandPC
             try
             {
                 var session = currentSession ?? sessionManager?.GetCurrentSession();
-                if (session == null) return lastKnownInfo;
+                if (session == null)
+                    return new MusicInfo
+                    {
+                        SourceApp = "Media",
+                        HasMedia = false,
+                        IsPlaying = false,
+                        Position = TimeSpan.Zero,
+                        Duration = TimeSpan.Zero
+                    };
 
                 var props = await session.TryGetMediaPropertiesAsync();
-                if (props == null || string.IsNullOrEmpty(props.Title)) return lastKnownInfo;
+                if (props == null || string.IsNullOrEmpty(props.Title))
+                    return new MusicInfo
+                    {
+                        SourceApp = MusicVisualHelper.NormalizeSource(session.SourceAppUserModelId),
+                        HasMedia = false,
+                        IsPlaying = false,
+                        Position = TimeSpan.Zero,
+                        Duration = TimeSpan.Zero
+                    };
 
                 var timeline = session.GetTimelineProperties();
                 var info = new MusicInfo
@@ -98,6 +114,7 @@ namespace DynamicIslandPC
                     Artist = props.Artist,
                     SourceApp = MusicVisualHelper.NormalizeSource(session.SourceAppUserModelId),
                     IsPlaying = session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
+                    HasMedia = true,
                     Position = timeline?.Position ?? TimeSpan.Zero,
                     Duration = timeline?.EndTime ?? TimeSpan.Zero
                 };

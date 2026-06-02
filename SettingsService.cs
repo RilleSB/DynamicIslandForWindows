@@ -13,6 +13,9 @@ namespace DynamicIslandPC
         public double Scale { get; set; } = 1.0;
         public string BackgroundColor { get; set; } = "#FF000000";
         public double BackgroundOpacity { get; set; } = 0.7;
+        public bool DecorationEnabled { get; set; } = true;
+        public string DecorationMediaPath { get; set; } = "";
+        public bool GamingModeEnabled { get; set; } = false;
     }
 
     public static class SettingsService

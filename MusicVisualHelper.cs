@@ -70,6 +70,10 @@ namespace DynamicIslandPC
                 return "Spotify";
             if (source.Contains("yandexmusic") || source.Contains("yandex"))
                 return "Yandex Music";
+            if (source.Contains("vkmusic") || source.Contains("vk.music") || source.Contains("vk"))
+                return "VK Music";
+            if (source.Contains("youtube"))
+                return "YouTube";
             if (source.Contains("wmplayer") || source.Contains("media.player"))
                 return "Windows Media";
             if (source.Contains("musicbee"))
@@ -84,6 +88,55 @@ namespace DynamicIslandPC
                 return "Edge";
 
             return sourceAppId;
+        }
+
+        public static string GetSourceBadgeLabel(string sourceApp)
+        {
+            var source = NormalizeSource(sourceApp);
+            var lower = source.ToLowerInvariant();
+
+            if (lower.Contains("spotify"))
+                return "Spotify";
+            if (lower.Contains("yandex"))
+                return "Yandex";
+            if (lower.Contains("vk"))
+                return "VK";
+            if (lower.Contains("youtube"))
+                return "YouTube";
+            if (lower.Contains("windows"))
+                return "WMP";
+            if (lower.Contains("foobar"))
+                return "foobar";
+            if (lower.Contains("musicbee"))
+                return "MusicBee";
+
+            return source.Length > 12 ? source.Substring(0, 12).Trim() : source;
+        }
+
+        public static Color GetSourceColor(string sourceApp)
+        {
+            var source = NormalizeSource(sourceApp).ToLowerInvariant();
+
+            if (source.Contains("spotify"))
+                return Color.FromRgb(30, 215, 96);
+            if (source.Contains("yandex"))
+                return Color.FromRgb(255, 204, 0);
+            if (source.Contains("vk"))
+                return Color.FromRgb(0, 119, 255);
+            if (source.Contains("youtube"))
+                return Color.FromRgb(255, 59, 48);
+            if (source.Contains("windows") || source.Contains("edge"))
+                return Color.FromRgb(76, 194, 255);
+            if (source.Contains("chrome"))
+                return Color.FromRgb(251, 188, 5);
+            if (source.Contains("vlc"))
+                return Color.FromRgb(255, 140, 26);
+            if (source.Contains("musicbee"))
+                return Color.FromRgb(253, 187, 45);
+            if (source.Contains("foobar"))
+                return Color.FromRgb(207, 207, 216);
+
+            return Color.FromRgb(138, 138, 150);
         }
 
         private static Color BlendToward(byte r, byte g, byte b, double amount)

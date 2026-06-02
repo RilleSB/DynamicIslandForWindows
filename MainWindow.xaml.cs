@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace DynamicIslandPC
@@ -31,18 +32,34 @@ namespace DynamicIslandPC
         private double customY = -1;
         private bool isDarkTheme = true;
         private double scale = 1.0;
+        private bool decorationEnabled = true;
+        private string decorationMediaPath = "";
+        private bool decorationIsVideo = false;
+        private bool gamingModeEnabled = false;
         private AppSettings _settings;
         private DispatcherTimer _progressTimer;
+        private DispatcherTimer _smartHideTimer;
+        private bool _isSmartHidden;
+        private const int SmartHideDelayMs = 3500;
+        private const int ForcedSmartShowMs = 8000;
         
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
         
         [DllImport("user32.dll")]
         private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
         
         private const int HOTKEY_ID = 9000;
         private const uint MOD_CONTROL = 0x0002;
         private const uint VK_SPACE = 0x20;
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TRANSPARENT = 0x00000020;
 
         public MainWindow()
         {
@@ -56,6 +73,7 @@ namespace DynamicIslandPC
                 InitializeWindow();
                 ApplyIslandBackground(GetConfiguredBackgroundColor(), backgroundOpacity);
                 SetTheme(isDarkTheme, applyBackground: false);
+                ApplyDecorationMedia();
                 InitializeMusicService();
                 RegisterGlobalHotkey();
                 InitializeTrayIcon();
@@ -155,6 +173,7 @@ namespace DynamicIslandPC
                     remaining = TimeSpan.Zero;
                 TotalTimeText.Text = "-" + FormatTime(remaining);
             }
+
         }
 
         private static string FormatTime(TimeSpan time)
@@ -177,6 +196,7 @@ namespace DynamicIslandPC
             var helper = new System.Windows.Interop.WindowInteropHelper(this);
             var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
             source.AddHook(HwndHook);
+            ApplyClickThroughMode();
         }
 
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -184,7 +204,14 @@ namespace DynamicIslandPC
             const int WM_HOTKEY = 0x0312;
             if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
             {
-                CycleDisplayMode();
+                if (_isSmartHidden || !IsVisible)
+                {
+                    ForceShowIsland();
+                }
+                else
+                {
+                    CycleDisplayMode();
+                }
                 handled = true;
             }
             return IntPtr.Zero;
@@ -316,10 +343,21 @@ namespace DynamicIslandPC
         {
             if (musicInfo == null) return;
             
+            bool hasDisplayableMusic = HasDisplayableMusic(musicInfo);
+            if (!hasDisplayableMusic)
+            {
+                if (string.IsNullOrWhiteSpace(musicInfo.Title))
+                    musicInfo.Title = "Нет воспроизведения";
+                if (string.IsNullOrWhiteSpace(musicInfo.Artist))
+                    musicInfo.Artist = "Запусти музыкальный плеер";
+                if (string.IsNullOrWhiteSpace(musicInfo.SourceApp))
+                    musicInfo.SourceApp = "Media";
+            }
+
             var currentTrackId = $"{musicInfo.Artist}|{musicInfo.Title}";
             var prevTrackId = lastMusicInfo != null ? $"{lastMusicInfo.Artist}|{lastMusicInfo.Title}" : "";
             
-            bool trackChanged = currentTrackId != prevTrackId;
+            bool trackChanged = hasDisplayableMusic && currentTrackId != prevTrackId;
 
             if (trackChanged)
             {
@@ -338,10 +376,10 @@ namespace DynamicIslandPC
             }
 
             AlbumArtPaused.Source = musicInfo.AlbumArt;
-            CompactSourceText.Text = musicInfo.SourceApp ?? "Media";
-            ExpandedSourceText.Text = musicInfo.SourceApp ?? "Media";
+            ApplySourceVisuals(musicInfo.SourceApp);
             UpdateAlbumAccent(MusicVisualHelper.GetAccentColor(musicInfo.AlbumArt));
             lastMusicInfo = musicInfo;
+            UpdateSmartVisibility(musicInfo, trackChanged);
 
             // Первый запуск без музыки — сразу PausedMode
             if (lastMusicInfo == null && !musicInfo.IsPlaying)
@@ -355,10 +393,8 @@ namespace DynamicIslandPC
             if (musicInfo.Duration > TimeSpan.Zero)
                 SetProgressRatio(musicInfo.Position.TotalSeconds / musicInfo.Duration.TotalSeconds);
             
+            UpdateDecorationVisibility(musicInfo.IsPlaying);
             var gifVisible = musicInfo.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
-            GifMinimalContainer.Visibility = gifVisible;
-            GifCompactContainer.Visibility = gifVisible;
-            GifExpandedContainer.Visibility = gifVisible;
             PlaybackIndicatorMinimal.Visibility = gifVisible;
             PlaybackIndicatorCompact.Visibility = gifVisible;
             PlaybackIndicatorExpanded.Visibility = gifVisible;
@@ -378,6 +414,14 @@ namespace DynamicIslandPC
             PlayPauseButton.Content = musicInfo.IsPlaying ? "⏸" : "▶";
             this.Title = $"Dynamic Island PC - {musicInfo.Title} - {musicInfo.Artist}";
             UpdateTitleMarquee();
+
+            if (!hasDisplayableMusic)
+            {
+                _pauseDebounceTimer?.Stop();
+                isPaused = false;
+                ShowDisplayModeWithoutAnimation();
+                return;
+            }
 
             // РџРµСЂРµРєР»СЋС‡Р°РµРј СЂРµР¶РёРј РїР°СѓР·С‹
             if (!musicInfo.IsPlaying && !isPaused)
@@ -413,6 +457,306 @@ namespace DynamicIslandPC
             1 => (335, 70),
             _ => (500, 176)
         };
+
+        private Grid GetDisplayModeGrid() => displayMode switch
+        {
+            0 => MinimalMode,
+            1 => CompactMode,
+            _ => ExpandedMode
+        };
+
+        private void ShowDisplayModeWithoutAnimation()
+        {
+            PausedMode.Visibility = Visibility.Collapsed;
+            MinimalMode.Visibility = displayMode == 0 ? Visibility.Visible : Visibility.Collapsed;
+            CompactMode.Visibility = displayMode == 1 ? Visibility.Visible : Visibility.Collapsed;
+            ExpandedMode.Visibility = displayMode == 2 ? Visibility.Visible : Visibility.Collapsed;
+            GetDisplayModeGrid().Opacity = 1;
+        }
+
+        private static bool HasDisplayableMusic(MusicInfo musicInfo)
+        {
+            return musicInfo?.HasMedia == true && !string.IsNullOrWhiteSpace(musicInfo.Title);
+        }
+
+        private void ApplySourceVisuals(string sourceApp)
+        {
+            var sourceName = MusicVisualHelper.NormalizeSource(sourceApp);
+            var badgeLabel = MusicVisualHelper.GetSourceBadgeLabel(sourceName);
+            var sourceColor = MusicVisualHelper.GetSourceColor(sourceName);
+
+            SetSourceBadge(CompactSourceBadge, CompactSourceDot, CompactSourceText, badgeLabel, sourceColor);
+            SetSourceBadge(ExpandedSourceBadge, ExpandedSourceDot, ExpandedSourceText, sourceName, sourceColor);
+        }
+
+        private void SetSourceBadge(Border badge, System.Windows.Shapes.Ellipse dot, TextBlock textBlock, string label, Color sourceColor)
+        {
+            var backgroundAlpha = isDarkTheme ? (byte)36 : (byte)28;
+            var borderAlpha = isDarkTheme ? (byte)64 : (byte)58;
+            badge.Background = new SolidColorBrush(Color.FromArgb(backgroundAlpha, sourceColor.R, sourceColor.G, sourceColor.B));
+            badge.BorderBrush = new SolidColorBrush(Color.FromArgb(borderAlpha, sourceColor.R, sourceColor.G, sourceColor.B));
+            dot.Fill = new SolidColorBrush(sourceColor);
+            textBlock.Text = string.IsNullOrWhiteSpace(label) ? "Media" : label;
+            textBlock.Foreground = isDarkTheme
+                ? new SolidColorBrush(Color.FromRgb(230, 230, 238))
+                : new SolidColorBrush(Color.FromRgb(28, 28, 34));
+        }
+
+        private void ApplyDecorationMedia()
+        {
+            var customMediaAvailable = !string.IsNullOrWhiteSpace(decorationMediaPath)
+                && File.Exists(decorationMediaPath)
+                && IsSupportedDecorationPath(decorationMediaPath);
+            decorationIsVideo = customMediaAvailable && IsVideoDecorationPath(decorationMediaPath);
+
+            StopDecorationVideos();
+
+            if (decorationIsVideo)
+            {
+                var uri = new Uri(decorationMediaPath, UriKind.Absolute);
+                SetDecorationVideo(DecorVideoMinimal, uri);
+                SetDecorationVideo(DecorVideoCompact, uri);
+                SetDecorationVideo(DecorVideoExpanded, uri);
+
+                GifMinimal.Visibility = Visibility.Collapsed;
+                GifCompact.Visibility = Visibility.Collapsed;
+                GifExpanded.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var imageUri = customMediaAvailable
+                ? new Uri(decorationMediaPath, UriKind.Absolute)
+                : new Uri("pack://application:,,,/flex.gif", UriKind.Absolute);
+            var isAnimatedGif = !customMediaAvailable || Path.GetExtension(decorationMediaPath).Equals(".gif", StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                SetDecorationImage(GifMinimal, imageUri, isAnimatedGif);
+                SetDecorationImage(GifCompact, imageUri, isAnimatedGif);
+                SetDecorationImage(GifExpanded, imageUri, isAnimatedGif);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to load custom decoration image, falling back to flex.gif", ex);
+                var fallbackUri = new Uri("pack://application:,,,/flex.gif", UriKind.Absolute);
+                SetDecorationImage(GifMinimal, fallbackUri, true);
+                SetDecorationImage(GifCompact, fallbackUri, true);
+                SetDecorationImage(GifExpanded, fallbackUri, true);
+            }
+
+            DecorVideoMinimal.Visibility = Visibility.Collapsed;
+            DecorVideoCompact.Visibility = Visibility.Collapsed;
+            DecorVideoExpanded.Visibility = Visibility.Collapsed;
+            GifMinimal.Visibility = Visibility.Visible;
+            GifCompact.Visibility = Visibility.Visible;
+            GifExpanded.Visibility = Visibility.Visible;
+        }
+
+        private static bool IsVideoDecorationPath(string path)
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext is ".mp4" or ".m4v" or ".mov" or ".wmv" or ".avi" or ".webm" or ".mkv";
+        }
+
+        private static bool IsSupportedDecorationPath(string path)
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif"
+                or ".mp4" or ".m4v" or ".mov" or ".wmv" or ".avi" or ".webm" or ".mkv";
+        }
+
+        private static void SetDecorationImage(Image image, Uri uri, bool isAnimatedGif)
+        {
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.UriSource = uri;
+            bitmap.EndInit();
+
+            if (isAnimatedGif)
+            {
+                WpfAnimatedGif.ImageBehavior.SetAnimatedSource(image, bitmap);
+            }
+            else
+            {
+                WpfAnimatedGif.ImageBehavior.SetAnimatedSource(image, null);
+                image.Source = bitmap;
+            }
+        }
+
+        private static void SetDecorationVideo(MediaElement video, Uri uri)
+        {
+            video.Source = uri;
+            video.Position = TimeSpan.Zero;
+        }
+
+        private void UpdateDecorationVisibility(bool isPlaying)
+        {
+            var isVisible = decorationEnabled && isPlaying;
+            var visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+            GifMinimalContainer.Visibility = visibility;
+            GifCompactContainer.Visibility = visibility;
+            GifExpandedContainer.Visibility = visibility;
+
+            if (decorationIsVideo)
+            {
+                GifMinimal.Visibility = Visibility.Collapsed;
+                GifCompact.Visibility = Visibility.Collapsed;
+                GifExpanded.Visibility = Visibility.Collapsed;
+                SetDecorationVideoVisibility(DecorVideoMinimal, isVisible);
+                SetDecorationVideoVisibility(DecorVideoCompact, isVisible);
+                SetDecorationVideoVisibility(DecorVideoExpanded, isVisible);
+            }
+            else
+            {
+                StopDecorationVideos();
+                GifMinimal.Visibility = Visibility.Visible;
+                GifCompact.Visibility = Visibility.Visible;
+                GifExpanded.Visibility = Visibility.Visible;
+                DecorVideoMinimal.Visibility = Visibility.Collapsed;
+                DecorVideoCompact.Visibility = Visibility.Collapsed;
+                DecorVideoExpanded.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private static void SetDecorationVideoVisibility(MediaElement video, bool isVisible)
+        {
+            video.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+            try
+            {
+                if (isVisible)
+                    video.Play();
+                else
+                    video.Pause();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to update decoration video playback", ex);
+            }
+        }
+
+        private void StopDecorationVideos()
+        {
+            StopDecorationVideo(DecorVideoMinimal);
+            StopDecorationVideo(DecorVideoCompact);
+            StopDecorationVideo(DecorVideoExpanded);
+        }
+
+        private static void StopDecorationVideo(MediaElement video)
+        {
+            try
+            {
+                video.Stop();
+                video.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to stop decoration video", ex);
+            }
+        }
+
+        private void DecorationVideo_MediaEnded(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MediaElement video || !decorationIsVideo)
+                return;
+
+            video.Position = TimeSpan.Zero;
+            video.Play();
+        }
+
+        private void UpdateSmartVisibility(MusicInfo musicInfo, bool trackChanged)
+        {
+            EnsureSmartHideTimer();
+
+            if (!HasDisplayableMusic(musicInfo))
+            {
+                ScheduleSmartHide(TimeSpan.FromMilliseconds(SmartHideDelayMs));
+                return;
+            }
+
+            _smartHideTimer.Stop();
+            if (_isSmartHidden || !IsVisible)
+                ShowIslandFromSmartHide(trackChanged);
+        }
+
+        private void EnsureSmartHideTimer()
+        {
+            if (_smartHideTimer != null)
+                return;
+
+            _smartHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(SmartHideDelayMs) };
+            _smartHideTimer.Tick += (s, e) =>
+            {
+                _smartHideTimer.Stop();
+                if (!HasDisplayableMusic(lastMusicInfo))
+                    HideIslandForSmartState();
+            };
+        }
+
+        private void ScheduleSmartHide(TimeSpan delay)
+        {
+            EnsureSmartHideTimer();
+            _smartHideTimer.Stop();
+            _smartHideTimer.Interval = delay;
+            _smartHideTimer.Start();
+        }
+
+        private void ForceShowIsland()
+        {
+            ShowIslandFromSmartHide(trackChanged: false);
+
+            if (!HasDisplayableMusic(lastMusicInfo))
+                ScheduleSmartHide(TimeSpan.FromMilliseconds(ForcedSmartShowMs));
+        }
+
+        private void ShowIslandFromSmartHide(bool trackChanged)
+        {
+            _isSmartHidden = false;
+            _smartHideTimer?.Stop();
+
+            BeginAnimation(OpacityProperty, null);
+            if (!IsVisible)
+            {
+                Opacity = 0;
+                Show();
+            }
+
+            Topmost = true;
+            if (trackChanged)
+                PulseAlbumArt();
+
+            var fadeIn = new DoubleAnimation
+            {
+                From = Math.Min(Opacity, 0.35),
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(260),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            BeginAnimation(OpacityProperty, fadeIn);
+        }
+
+        private void HideIslandForSmartState()
+        {
+            if (_isSmartHidden)
+                return;
+
+            _isSmartHidden = true;
+            BeginAnimation(OpacityProperty, null);
+
+            var fadeOut = new DoubleAnimation
+            {
+                From = Opacity,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(260),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+            };
+            fadeOut.Completed += (s, e) =>
+            {
+                if (_isSmartHidden)
+                    Hide();
+            };
+            BeginAnimation(OpacityProperty, fadeOut);
+        }
 
         private void AnimateToPaused()
         {
@@ -591,6 +935,16 @@ namespace DynamicIslandPC
         {
             UpdateSingleMarquee(CompactTitle, CompactTitleTranslate, ref _compactMarqueeStoryboard, 124);
             UpdateSingleMarquee(TrackTitle, TrackTitleTranslate, ref _expandedMarqueeStoryboard, 246);
+            CompactTitleOldTranslate.X = 0;
+            TrackTitleOldTranslate.X = 0;
+        }
+
+        private void StopTitleMarquee()
+        {
+            _compactMarqueeStoryboard?.Stop();
+            _expandedMarqueeStoryboard?.Stop();
+            CompactTitleTranslate.X = 0;
+            TrackTitleTranslate.X = 0;
             CompactTitleOldTranslate.X = 0;
             TrackTitleOldTranslate.X = 0;
         }
@@ -797,6 +1151,13 @@ namespace DynamicIslandPC
             scaleMenu.DropDownItems.Add(scale125);
             scaleMenu.DropDownItems.Add(scale150);
             contextMenu.Items.Add(scaleMenu);
+
+            var gamingModeItem = new System.Windows.Forms.ToolStripMenuItem("Игровой режим", null, (s, e) => SetGamingMode(!gamingModeEnabled))
+            {
+                CheckOnClick = false,
+                Checked = gamingModeEnabled
+            };
+            contextMenu.Items.Add(gamingModeItem);
             
             contextMenu.Items.Add("Выход", null, (s, e) => 
             {
@@ -850,6 +1211,7 @@ namespace DynamicIslandPC
             var helper = new System.Windows.Interop.WindowInteropHelper(this);
             UnregisterHotKey(helper.Handle, HOTKEY_ID);
             _progressTimer?.Stop();
+            _smartHideTimer?.Stop();
             _pauseDebounceTimer?.Stop();
             SaveSettings();
             trayIcon?.Dispose();

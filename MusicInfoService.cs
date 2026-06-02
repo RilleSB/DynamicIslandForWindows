@@ -13,6 +13,7 @@ namespace DynamicIslandPC
         public string SourceApp { get; set; }
         public BitmapImage AlbumArt { get; set; }
         public bool IsPlaying { get; set; }
+        public bool HasMedia { get; set; }
         public TimeSpan Position { get; set; }
         public TimeSpan Duration { get; set; }
     }
@@ -52,6 +53,11 @@ namespace DynamicIslandPC
                 info.Title = "Нет воспроизведения";
                 info.Artist = "Запустите музыкальный плеер";
                 info.IsPlaying = false;
+                info.HasMedia = false;
+            }
+            else
+            {
+                info.HasMedia = true;
             }
             
             if (info.AlbumArt == null)

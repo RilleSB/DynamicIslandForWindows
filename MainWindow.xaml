@@ -183,6 +183,13 @@
                                             <EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/>
                                         </Image.Clip>
                                     </Image>
+                                    <MediaElement x:Name="DecorVideoMinimal" Width="42" Height="42" Stretch="UniformToFill"
+                                                  LoadedBehavior="Manual" UnloadedBehavior="Manual" Volume="0"
+                                                  Visibility="Collapsed" MediaEnded="DecorationVideo_MediaEnded">
+                                        <MediaElement.Clip>
+                                            <EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/>
+                                        </MediaElement.Clip>
+                                    </MediaElement>
                                 </Grid>
                             </StackPanel>
                         </Grid>
@@ -247,7 +254,12 @@
                                         </TextBlock>
                                     </Grid>
                                     <TextBlock x:Name="CompactArtist" Text="Исполнитель" Foreground="#C4C4CC" FontSize="9.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock x:Name="CompactSourceText" Text="Media" Foreground="#8C8C96" FontSize="8.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <Border x:Name="CompactSourceBadge" Margin="0,4,0,0" HorizontalAlignment="Left" CornerRadius="7" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="1" Padding="5,1">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse x:Name="CompactSourceDot" Width="4" Height="4" Fill="#21D760" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="CompactSourceText" Text="Media" Foreground="#D6D6DE" FontSize="8.5" FontWeight="SemiBold" MaxWidth="82" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </Grid>
 
@@ -269,6 +281,11 @@
                                     <Image x:Name="GifCompact" Width="42" Height="42" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
                                         <Image.Clip><EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/></Image.Clip>
                                     </Image>
+                                    <MediaElement x:Name="DecorVideoCompact" Width="42" Height="42" Stretch="UniformToFill"
+                                                  LoadedBehavior="Manual" UnloadedBehavior="Manual" Volume="0"
+                                                  Visibility="Collapsed" MediaEnded="DecorationVideo_MediaEnded">
+                                        <MediaElement.Clip><EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/></MediaElement.Clip>
+                                    </MediaElement>
                                 </Grid>
                             </StackPanel>
                         </Grid>
@@ -345,7 +362,12 @@
                                             </TextBlock>
                                         </Grid>
                                         <TextBlock x:Name="ArtistName" Text="Исполнитель" Foreground="#B6B6BF" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock x:Name="ExpandedSourceText" Text="Media" Foreground="#8C8C96" FontSize="9" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <Border x:Name="ExpandedSourceBadge" Margin="0,6,0,0" HorizontalAlignment="Left" CornerRadius="8" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="1" Padding="6,1">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse x:Name="ExpandedSourceDot" Width="4" Height="4" Fill="#21D760" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="ExpandedSourceText" Text="Media" Foreground="#D6D6DE" FontSize="9" FontWeight="SemiBold" MaxWidth="145" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
                                 </Grid>
 
@@ -367,6 +389,11 @@
                                         <Image x:Name="GifExpanded" Width="36" Height="36" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
                                             <Image.Clip><EllipseGeometry Center="18,18" RadiusX="18" RadiusY="18"/></Image.Clip>
                                         </Image>
+                                        <MediaElement x:Name="DecorVideoExpanded" Width="36" Height="36" Stretch="UniformToFill"
+                                                      LoadedBehavior="Manual" UnloadedBehavior="Manual" Volume="0"
+                                                      Visibility="Collapsed" MediaEnded="DecorationVideo_MediaEnded">
+                                            <MediaElement.Clip><EllipseGeometry Center="18,18" RadiusX="18" RadiusY="18"/></MediaElement.Clip>
+                                        </MediaElement>
                                     </Grid>
                                 </StackPanel>
                             </Grid>
