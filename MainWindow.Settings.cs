@@ -12,6 +12,8 @@ namespace DynamicIslandPC
         private string backgroundColorHex = "#FF000000";
         private double backgroundOpacity = 0.7;
         private Color albumAccentColor = Color.FromRgb(88, 88, 96);
+        private AlbumColorPalette albumPalette = MusicVisualHelper.GetAlbumPalette(null);
+        private bool adaptiveAlbumThemeEnabled = true;
 
         private void ApplySettings(AppSettings s)
         {
@@ -22,6 +24,7 @@ namespace DynamicIslandPC
             isDarkTheme = s.IsDarkTheme;
             backgroundColorHex = string.IsNullOrWhiteSpace(s.BackgroundColor) ? "#FF000000" : s.BackgroundColor;
             backgroundOpacity = Math.Clamp(s.BackgroundOpacity, 0.1, 1.0);
+            adaptiveAlbumThemeEnabled = s.AdaptiveAlbumThemeEnabled;
             decorationEnabled = s.DecorationEnabled;
             decorationMediaPath = s.DecorationMediaPath ?? string.Empty;
             gamingModeEnabled = s.GamingModeEnabled;
@@ -36,6 +39,7 @@ namespace DynamicIslandPC
             _settings.IsDarkTheme = isDarkTheme;
             _settings.BackgroundColor = backgroundColorHex;
             _settings.BackgroundOpacity = backgroundOpacity;
+            _settings.AdaptiveAlbumThemeEnabled = adaptiveAlbumThemeEnabled;
             _settings.DecorationEnabled = decorationEnabled;
             _settings.DecorationMediaPath = decorationMediaPath ?? string.Empty;
             _settings.GamingModeEnabled = gamingModeEnabled;
@@ -59,12 +63,30 @@ namespace DynamicIslandPC
 
         private void UpdateAlbumAccent(Color accentColor, bool animated = true)
         {
-            albumAccentColor = accentColor;
+            UpdateAlbumPalette(new AlbumColorPalette
+            {
+                Primary = accentColor,
+                Secondary = MixBaseAndAccent(accentColor, Color.FromRgb(42, 42, 50), 0.45),
+                Tertiary = MixBaseAndAccent(accentColor, Color.FromRgb(20, 20, 26), 0.7)
+            }, animated);
+        }
 
-            var target = MixBaseAndAccent(GetConfiguredBackgroundColor(), albumAccentColor, isDarkTheme ? 0.22 : 0.12);
+        private void UpdateAlbumPalette(AlbumColorPalette palette, bool animated = true)
+        {
+            albumPalette = palette ?? MusicVisualHelper.GetAlbumPalette(null);
+            albumAccentColor = albumPalette.Primary;
+
+            if (!adaptiveAlbumThemeEnabled)
+            {
+                ApplyStaticBackground(animated);
+                return;
+            }
+
+            var target = MixBaseAndAccent(GetConfiguredBackgroundColor(), albumPalette.Primary, isDarkTheme ? 0.24 : 0.14);
             if (IslandBorder.Background is not SolidColorBrush brush)
             {
                 ApplyIslandBackground(target, backgroundOpacity);
+                UpdateAlbumAura(animated: false);
                 return;
             }
 
@@ -72,6 +94,7 @@ namespace DynamicIslandPC
             {
                 brush.Color = target;
                 brush.Opacity = backgroundOpacity;
+                UpdateAlbumAura(animated: false);
                 return;
             }
 
@@ -83,6 +106,69 @@ namespace DynamicIslandPC
             };
             brush.BeginAnimation(SolidColorBrush.ColorProperty, colorAnimation);
             brush.Opacity = backgroundOpacity;
+            UpdateAlbumAura(animated: true);
+        }
+
+        private void ApplyStaticBackground(bool animated)
+        {
+            var target = GetConfiguredBackgroundColor();
+            if (IslandBorder.Background is not SolidColorBrush brush)
+            {
+                ApplyIslandBackground(target, backgroundOpacity);
+            }
+            else if (animated)
+            {
+                brush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation
+                {
+                    To = target,
+                    Duration = TimeSpan.FromMilliseconds(360),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                });
+                brush.Opacity = backgroundOpacity;
+            }
+            else
+            {
+                brush.BeginAnimation(SolidColorBrush.ColorProperty, null);
+                brush.Color = target;
+                brush.Opacity = backgroundOpacity;
+            }
+
+            ClearAlbumAura(animated);
+        }
+
+        private void ClearAlbumAura(bool animated)
+        {
+            SetGradientStopColor(AlbumAuraPrimaryStop, Colors.Transparent, animated);
+            SetGradientStopColor(AlbumAuraSecondaryStop, Colors.Transparent, animated);
+            SetGradientStopColor(AlbumAuraTertiaryStop, Colors.Transparent, animated);
+        }
+
+        private void UpdateAlbumAura(bool animated)
+        {
+            SetGradientStopColor(AlbumAuraPrimaryStop, WithAlpha(albumPalette.Primary, isDarkTheme ? (byte)88 : (byte)46), animated);
+            SetGradientStopColor(AlbumAuraSecondaryStop, WithAlpha(albumPalette.Secondary, isDarkTheme ? (byte)58 : (byte)34), animated);
+            SetGradientStopColor(AlbumAuraTertiaryStop, WithAlpha(albumPalette.Tertiary, isDarkTheme ? (byte)32 : (byte)18), animated);
+        }
+
+        private static void SetGradientStopColor(GradientStop stop, Color color, bool animated)
+        {
+            if (!animated)
+            {
+                stop.Color = color;
+                return;
+            }
+
+            stop.BeginAnimation(GradientStop.ColorProperty, new ColorAnimation
+            {
+                To = color,
+                Duration = TimeSpan.FromMilliseconds(520),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            });
+        }
+
+        private static Color WithAlpha(Color color, byte alpha)
+        {
+            return Color.FromArgb(alpha, color.R, color.G, color.B);
         }
 
         private Color GetConfiguredBackgroundColor()
@@ -172,9 +258,13 @@ namespace DynamicIslandPC
                     (color, opacity) =>
                     {
                         ApplyIslandBackground(color, opacity);
-                        UpdateAlbumAccent(albumAccentColor);
+                        UpdateAlbumPalette(albumPalette);
                         SaveSettings();
                         Logger.Log($"Background changed to {color} with opacity {opacity:0.00}");
+                    },
+                    enabled =>
+                    {
+                        SetAdaptiveAlbumTheme(enabled);
                     },
                     (enabled, mediaPath) =>
                     {
@@ -261,6 +351,16 @@ namespace DynamicIslandPC
             Logger.Log(string.IsNullOrWhiteSpace(decorationMediaPath)
                 ? $"Decoration {(enabled ? "enabled" : "disabled")} with default media"
                 : $"Decoration {(enabled ? "enabled" : "disabled")} with {decorationMediaPath}");
+        }
+
+        private void SetAdaptiveAlbumTheme(bool enabled)
+        {
+            adaptiveAlbumThemeEnabled = enabled;
+            UpdateAlbumPalette(lastMusicInfo?.AlbumArt != null
+                ? MusicVisualHelper.GetAlbumPalette(lastMusicInfo.AlbumArt)
+                : albumPalette);
+            SaveSettings();
+            Logger.Log($"Adaptive album theme {(adaptiveAlbumThemeEnabled ? "enabled" : "disabled")}");
         }
 
         private void SetGamingMode(bool enabled)

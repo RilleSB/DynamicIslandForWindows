@@ -27,6 +27,8 @@ namespace DynamicIslandPC
         private Storyboard _revealStoryboard;
         private Storyboard _compactMarqueeStoryboard;
         private Storyboard _expandedMarqueeStoryboard;
+        private Storyboard _modeStoryboard;
+        private DateTime _lastModeSwitchAt = DateTime.MinValue;
         private bool isTopPosition = true;
         private double customX = -1;
         private double customY = -1;
@@ -219,25 +221,31 @@ namespace DynamicIslandPC
         
         private void CycleDisplayMode()
         {
+            var now = DateTime.UtcNow;
+            if ((now - _lastModeSwitchAt).TotalMilliseconds < 280)
+                return;
+
+            _lastModeSwitchAt = now;
             displayMode = (displayMode + 1) % 3;
             AnimateToMode();
         }
 
         private void AnimateToMode()
         {
+            Grid currentMode = MinimalMode.Visibility == Visibility.Visible ? MinimalMode :
+                              CompactMode.Visibility == Visibility.Visible ? CompactMode : ExpandedMode;
+            Grid targetMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
+
+            _modeStoryboard?.Stop();
+            ResetModeAnimationState(currentMode);
+
             var storyboard = new Storyboard();
+            _modeStoryboard = storyboard;
             
             // Анимация прозрачности для старого режима
             var oldMode = displayMode == 0 ? (displayMode == 1 ? CompactMode : ExpandedMode) : 
                          (displayMode == 1 ? (MinimalMode.Visibility == Visibility.Visible ? MinimalMode : ExpandedMode) : 
                          (CompactMode.Visibility == Visibility.Visible ? CompactMode : MinimalMode));
-            
-            // Определяем текущий видимый режим
-            Grid currentMode = MinimalMode.Visibility == Visibility.Visible ? MinimalMode :
-                              CompactMode.Visibility == Visibility.Visible ? CompactMode : ExpandedMode;
-            
-            // Определяем целевой режим
-            Grid targetMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
             
             if (currentMode != targetMode)
             {
@@ -275,7 +283,14 @@ namespace DynamicIslandPC
                 {
                     currentMode.Visibility = Visibility.Collapsed;
                     currentMode.Opacity = 1;
+                    targetMode.Visibility = Visibility.Visible;
+                    targetMode.Opacity = 1;
+                    _modeStoryboard = null;
                 };
+            }
+            else
+            {
+                storyboard.Completed += (s, e) => _modeStoryboard = null;
             }
             
             var (baseWidth, baseHeight) = GetModeSize(displayMode);
@@ -339,6 +354,21 @@ namespace DynamicIslandPC
             storyboard.Begin();
         }
 
+        private void ResetModeAnimationState(Grid currentMode)
+        {
+            MinimalMode.BeginAnimation(OpacityProperty, null);
+            CompactMode.BeginAnimation(OpacityProperty, null);
+            ExpandedMode.BeginAnimation(OpacityProperty, null);
+
+            MinimalMode.Opacity = 1;
+            CompactMode.Opacity = 1;
+            ExpandedMode.Opacity = 1;
+
+            MinimalMode.Visibility = currentMode == MinimalMode ? Visibility.Visible : Visibility.Collapsed;
+            CompactMode.Visibility = currentMode == CompactMode ? Visibility.Visible : Visibility.Collapsed;
+            ExpandedMode.Visibility = currentMode == ExpandedMode ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private void ApplyMusicInfo(MusicInfo musicInfo)
         {
             if (musicInfo == null) return;
@@ -377,7 +407,7 @@ namespace DynamicIslandPC
 
             AlbumArtPaused.Source = musicInfo.AlbumArt;
             ApplySourceVisuals(musicInfo.SourceApp);
-            UpdateAlbumAccent(MusicVisualHelper.GetAccentColor(musicInfo.AlbumArt));
+            UpdateAlbumPalette(MusicVisualHelper.GetAlbumPalette(musicInfo.AlbumArt));
             lastMusicInfo = musicInfo;
             UpdateSmartVisibility(musicInfo, trackChanged);
 

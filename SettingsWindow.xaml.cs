@@ -16,6 +16,7 @@ namespace DynamicIslandPC
         private bool isDarkTheme = true;
         private string backgroundColorHex = "#FF000000";
         private double backgroundOpacity = 0.7;
+        private bool adaptiveAlbumThemeEnabled = true;
         private bool decorationEnabled = true;
         private string decorationMediaPath = "";
 
@@ -23,6 +24,7 @@ namespace DynamicIslandPC
         private readonly Action<double, double> onPositionChanged;
         private readonly Action<bool> onThemeChanged;
         private readonly Action<Color, double> onBackgroundChanged;
+        private readonly Action<bool> onAdaptiveAlbumThemeChanged;
         private readonly Action<bool, string> onDecorationChanged;
         private readonly Forms.Screen currentScreen;
 
@@ -33,6 +35,7 @@ namespace DynamicIslandPC
             Action<double, double> positionChangedCallback,
             Action<bool> themeChangedCallback = null,
             Action<Color, double> backgroundChangedCallback = null,
+            Action<bool> adaptiveAlbumThemeChangedCallback = null,
             Action<bool, string> decorationChangedCallback = null)
         {
             InitializeComponent();
@@ -41,11 +44,13 @@ namespace DynamicIslandPC
             onPositionChanged = positionChangedCallback;
             onThemeChanged = themeChangedCallback;
             onBackgroundChanged = backgroundChangedCallback;
+            onAdaptiveAlbumThemeChanged = adaptiveAlbumThemeChangedCallback;
             onDecorationChanged = decorationChangedCallback;
 
             isDarkTheme = settings.IsDarkTheme;
             backgroundColorHex = string.IsNullOrWhiteSpace(settings.BackgroundColor) ? "#FF000000" : settings.BackgroundColor;
             backgroundOpacity = Math.Clamp(settings.BackgroundOpacity, 0.1, 1.0);
+            adaptiveAlbumThemeEnabled = settings.AdaptiveAlbumThemeEnabled;
             decorationEnabled = settings.DecorationEnabled;
             decorationMediaPath = settings.DecorationMediaPath ?? string.Empty;
 
@@ -67,6 +72,7 @@ namespace DynamicIslandPC
             TextY.Text = ((int)currentY).ToString();
 
             BackgroundOpacitySlider.Value = backgroundOpacity * 100.0;
+            AdaptiveAlbumThemeCheckBox.IsChecked = adaptiveAlbumThemeEnabled;
             DecorationEnabledCheckBox.IsChecked = decorationEnabled;
             isUpdating = false;
 
@@ -216,6 +222,15 @@ namespace DynamicIslandPC
         private void NotifyBackgroundChanged()
         {
             onBackgroundChanged?.Invoke(GetBackgroundColor(), backgroundOpacity);
+        }
+
+        private void AdaptiveAlbumThemeChanged(object sender, RoutedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+
+            adaptiveAlbumThemeEnabled = AdaptiveAlbumThemeCheckBox.IsChecked == true;
+            settings.AdaptiveAlbumThemeEnabled = adaptiveAlbumThemeEnabled;
+            onAdaptiveAlbumThemeChanged?.Invoke(adaptiveAlbumThemeEnabled);
         }
 
         private Color GetBackgroundColor()

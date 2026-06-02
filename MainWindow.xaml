@@ -54,6 +54,16 @@
             </Border.Background>
 
             <Grid>
+                <Border x:Name="AlbumAuraBorder" CornerRadius="35" Margin="1" IsHitTestVisible="False" Opacity="0.72">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop x:Name="AlbumAuraPrimaryStop" Color="#223C3C44" Offset="0"/>
+                            <GradientStop x:Name="AlbumAuraSecondaryStop" Color="#141E1E24" Offset="0.55"/>
+                            <GradientStop x:Name="AlbumAuraTertiaryStop" Color="#08000000" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
                 <Border CornerRadius="35" Margin="1" IsHitTestVisible="False" Opacity="0.85">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">

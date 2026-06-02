@@ -1,31 +1,50 @@
 using System;
+using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace DynamicIslandPC
 {
+    internal sealed class AlbumColorPalette
+    {
+        public Color Primary { get; init; }
+        public Color Secondary { get; init; }
+        public Color Tertiary { get; init; }
+    }
+
     internal static class MusicVisualHelper
     {
+        private static readonly AlbumColorPalette DefaultPalette = new()
+        {
+            Primary = Color.FromRgb(88, 88, 96),
+            Secondary = Color.FromRgb(58, 58, 66),
+            Tertiary = Color.FromRgb(36, 36, 44)
+        };
+
         public static Color GetAccentColor(BitmapSource bitmapSource)
         {
+            return GetAlbumPalette(bitmapSource).Primary;
+        }
+
+        public static AlbumColorPalette GetAlbumPalette(BitmapSource bitmapSource)
+        {
             if (bitmapSource == null)
-                return Color.FromRgb(88, 88, 96);
+                return DefaultPalette;
 
             try
             {
-                // Sample a downscaled version to keep the accent subtle and stable.
+                // Sample a downscaled version to keep palette extraction cheap.
                 var scaled = new TransformedBitmap(bitmapSource, new ScaleTransform(
-                    Math.Min(1.0, 24.0 / bitmapSource.PixelWidth),
-                    Math.Min(1.0, 24.0 / bitmapSource.PixelHeight)));
+                    Math.Min(1.0, 32.0 / bitmapSource.PixelWidth),
+                    Math.Min(1.0, 32.0 / bitmapSource.PixelHeight)));
 
                 int stride = scaled.PixelWidth * 4;
                 var pixels = new byte[scaled.PixelHeight * stride];
                 scaled.CopyPixels(pixels, stride, 0);
 
-                double totalWeight = 0;
-                double red = 0;
-                double green = 0;
-                double blue = 0;
+                var buckets = new ColorBucket[16];
+                for (int i = 0; i < buckets.Length; i++)
+                    buckets[i] = new ColorBucket();
 
                 for (int i = 0; i < pixels.Length; i += 4)
                 {
@@ -36,27 +55,56 @@ namespace DynamicIslandPC
                     double max = Math.Max(r, Math.Max(g, b));
                     double min = Math.Min(r, Math.Min(g, b));
                     double saturation = max == 0 ? 0 : (max - min) / max;
-                    double brightness = (r + g + b) / (255.0 * 3.0);
-                    double weight = 0.35 + saturation + brightness * 0.35;
+                    double brightness = max / 255.0;
 
-                    totalWeight += weight;
-                    red += r * weight;
-                    green += g * weight;
-                    blue += b * weight;
+                    if (brightness < 0.08 || brightness > 0.96)
+                        continue;
+
+                    var hue = GetHue(r, g, b);
+                    var bucketIndex = (int)Math.Clamp(Math.Floor(hue / 360.0 * buckets.Length), 0, buckets.Length - 1);
+                    var weight = 0.25 + saturation * 1.45 + brightness * 0.35;
+                    buckets[bucketIndex].Add(r, g, b, weight);
                 }
 
-                if (totalWeight <= 0.001)
-                    return Color.FromRgb(88, 88, 96);
+                var colors = new Color[3];
+                int count = 0;
 
-                byte avgR = (byte)Math.Clamp(red / totalWeight, 0, 255);
-                byte avgG = (byte)Math.Clamp(green / totalWeight, 0, 255);
-                byte avgB = (byte)Math.Clamp(blue / totalWeight, 0, 255);
+                foreach (var bucket in buckets.OrderByDescending(b => b.Score))
+                {
+                    if (bucket.Score <= 0.001)
+                        continue;
 
-                return BlendToward(avgR, avgG, avgB, 0.55);
+                    var candidate = bucket.ToColor();
+                    if (count > 0 && !IsDistinct(candidate, colors, count))
+                        continue;
+
+                    colors[count++] = SoftenForUi(candidate);
+                    if (count == colors.Length)
+                        break;
+                }
+
+                if (count == 0)
+                    return DefaultPalette;
+                if (count == 1)
+                {
+                    colors[1] = Mix(colors[0], Color.FromRgb(42, 42, 50), 0.55);
+                    colors[2] = Mix(colors[0], Color.FromRgb(20, 20, 26), 0.75);
+                }
+                else if (count == 2)
+                {
+                    colors[2] = Mix(colors[0], colors[1], 0.5);
+                }
+
+                return new AlbumColorPalette
+                {
+                    Primary = colors[0],
+                    Secondary = colors[1],
+                    Tertiary = colors[2]
+                };
             }
             catch
             {
-                return Color.FromRgb(88, 88, 96);
+                return DefaultPalette;
             }
         }
 
@@ -149,6 +197,86 @@ namespace DynamicIslandPC
                 (byte)(baseR + (r - baseR) * amount),
                 (byte)(baseG + (g - baseG) * amount),
                 (byte)(baseB + (b - baseB) * amount));
+        }
+
+        private static Color SoftenForUi(Color color)
+        {
+            return BlendToward(color.R, color.G, color.B, 0.58);
+        }
+
+        private static Color Mix(Color first, Color second, double secondAmount)
+        {
+            return Color.FromRgb(
+                (byte)(first.R + (second.R - first.R) * secondAmount),
+                (byte)(first.G + (second.G - first.G) * secondAmount),
+                (byte)(first.B + (second.B - first.B) * secondAmount));
+        }
+
+        private static bool IsDistinct(Color candidate, Color[] selected, int selectedCount)
+        {
+            for (int i = 0; i < selectedCount; i++)
+            {
+                var existing = selected[i];
+                var distance = Math.Abs(candidate.R - existing.R)
+                    + Math.Abs(candidate.G - existing.G)
+                    + Math.Abs(candidate.B - existing.B);
+                if (distance < 72)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static double GetHue(byte r, byte g, byte b)
+        {
+            double red = r / 255.0;
+            double green = g / 255.0;
+            double blue = b / 255.0;
+            double max = Math.Max(red, Math.Max(green, blue));
+            double min = Math.Min(red, Math.Min(green, blue));
+            double delta = max - min;
+
+            if (delta <= 0.0001)
+                return 0;
+
+            double hue;
+            if (Math.Abs(max - red) < 0.0001)
+                hue = 60 * (((green - blue) / delta) % 6);
+            else if (Math.Abs(max - green) < 0.0001)
+                hue = 60 * (((blue - red) / delta) + 2);
+            else
+                hue = 60 * (((red - green) / delta) + 4);
+
+            return hue < 0 ? hue + 360 : hue;
+        }
+
+        private sealed class ColorBucket
+        {
+            private double red;
+            private double green;
+            private double blue;
+            private double weight;
+
+            public double Score => weight;
+
+            public void Add(byte r, byte g, byte b, double pixelWeight)
+            {
+                red += r * pixelWeight;
+                green += g * pixelWeight;
+                blue += b * pixelWeight;
+                weight += pixelWeight;
+            }
+
+            public Color ToColor()
+            {
+                if (weight <= 0.001)
+                    return Color.FromRgb(88, 88, 96);
+
+                return Color.FromRgb(
+                    (byte)Math.Clamp(red / weight, 0, 255),
+                    (byte)Math.Clamp(green / weight, 0, 255),
+                    (byte)Math.Clamp(blue / weight, 0, 255));
+            }
         }
     }
 }

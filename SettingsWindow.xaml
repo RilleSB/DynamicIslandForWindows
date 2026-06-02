@@ -203,6 +203,13 @@
                         </Grid>
                         <Slider x:Name="BackgroundOpacitySlider" Minimum="10" Maximum="100" Value="70"
                                 TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="BackgroundOpacitySlider_ValueChanged"/>
+
+                        <CheckBox x:Name="AdaptiveAlbumThemeCheckBox"
+                                  Content="Адаптивный фон от обложки"
+                                  Foreground="White"
+                                  Margin="0,14,0,0"
+                                  Checked="AdaptiveAlbumThemeChanged"
+                                  Unchecked="AdaptiveAlbumThemeChanged"/>
                     </StackPanel>
                 </Border>
 
