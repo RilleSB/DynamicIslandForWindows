@@ -108,11 +108,26 @@ namespace DynamicIslandPC
                     };
 
                 var timeline = session.GetTimelineProperties();
+                var rawTitle = props.Title;
+                var rawArtist = props.Artist;
+                var rawSource = session.SourceAppUserModelId;
+
+                var sanitizedTitle = MusicVisualHelper.SanitizeTitle(rawTitle);
+                var sanitizedArtist = MusicVisualHelper.SanitizeArtist(rawArtist);
+                var normalizedSource = MusicVisualHelper.NormalizeSource(rawSource);
+
+                if (!string.Equals(rawArtist, sanitizedArtist, StringComparison.Ordinal) ||
+                    !string.Equals(rawSource, normalizedSource, StringComparison.Ordinal) ||
+                    !string.Equals(rawTitle, sanitizedTitle, StringComparison.Ordinal))
+                {
+                    Logger.Log($"Sanitized browser/media metadata: title='{rawTitle}' -> '{sanitizedTitle}', artist='{rawArtist}' -> '{sanitizedArtist}', source='{rawSource}' -> '{normalizedSource}'");
+                }
+
                 var info = new MusicInfo
                 {
-                    Title = props.Title,
-                    Artist = props.Artist,
-                    SourceApp = MusicVisualHelper.NormalizeSource(session.SourceAppUserModelId),
+                    Title = sanitizedTitle,
+                    Artist = sanitizedArtist,
+                    SourceApp = normalizedSource,
                     IsPlaying = session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
                     HasMedia = true,
                     Position = timeline?.Position ?? TimeSpan.Zero,

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -14,6 +15,11 @@ namespace DynamicIslandPC
 
     internal static class MusicVisualHelper
     {
+        private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+        private static readonly Regex HexIdRegex = new(@"^[A-F0-9]{8,}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex OpaqueIdRegex = new(@"^[A-Z0-9_-]{8,}$", RegexOptions.Compiled);
+        private static readonly Regex TransportNoiseRegex = new(@"\b\d+\s*(kb/s|mb/s|gb/s|fps|hz)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         private static readonly AlbumColorPalette DefaultPalette = new()
         {
             Primary = Color.FromRgb(88, 88, 96),
@@ -113,7 +119,8 @@ namespace DynamicIslandPC
             if (string.IsNullOrWhiteSpace(sourceAppId))
                 return "Media";
 
-            var source = sourceAppId.ToLowerInvariant();
+            var normalized = NormalizeWhitespace(sourceAppId);
+            var source = normalized.ToLowerInvariant();
             if (source.Contains("spotify"))
                 return "Spotify";
             if (source.Contains("yandexmusic") || source.Contains("yandex"))
@@ -134,8 +141,36 @@ namespace DynamicIslandPC
                 return "Chrome";
             if (source.Contains("msedge"))
                 return "Edge";
+            if (source.Contains("firefox"))
+                return "Firefox";
+            if (source.Contains("opera"))
+                return "Opera";
+            if (source.Contains("browser"))
+                return "Browser";
+            if (LooksLikeOpaqueId(normalized))
+                return "Browser";
 
-            return sourceAppId;
+            return normalized;
+        }
+
+        public static string SanitizeTitle(string title)
+        {
+            var sanitized = NormalizeWhitespace(title);
+            if (string.IsNullOrWhiteSpace(sanitized))
+                return string.Empty;
+
+            return sanitized;
+        }
+
+        public static string SanitizeArtist(string artist)
+        {
+            var sanitized = NormalizeWhitespace(artist);
+            if (string.IsNullOrWhiteSpace(sanitized))
+                return string.Empty;
+            if (LooksLikeGarbageMetadata(sanitized))
+                return string.Empty;
+
+            return sanitized;
         }
 
         public static string GetSourceBadgeLabel(string sourceApp)
@@ -248,6 +283,42 @@ namespace DynamicIslandPC
                 hue = 60 * (((red - green) / delta) + 4);
 
             return hue < 0 ? hue + 360 : hue;
+        }
+
+        private static string NormalizeWhitespace(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            return WhitespaceRegex.Replace(value.Trim(), " ");
+        }
+
+        private static bool LooksLikeGarbageMetadata(string value)
+        {
+            if (TransportNoiseRegex.IsMatch(value))
+                return true;
+            if (LooksLikeOpaqueId(value))
+                return true;
+
+            return false;
+        }
+
+        private static bool LooksLikeOpaqueId(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var candidate = value.Trim();
+            if (candidate.Contains(' '))
+                return false;
+            if (HexIdRegex.IsMatch(candidate))
+                return true;
+            if (!OpaqueIdRegex.IsMatch(candidate))
+                return false;
+
+            var digitCount = candidate.Count(char.IsDigit);
+            var upperCount = candidate.Count(char.IsUpper);
+            return digitCount >= 3 && upperCount >= 3;
         }
 
         private sealed class ColorBucket
