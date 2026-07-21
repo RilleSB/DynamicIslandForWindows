@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Media;
@@ -19,6 +20,10 @@ namespace DynamicIslandPC
         private static readonly Regex HexIdRegex = new(@"^[A-F0-9]{8,}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex OpaqueIdRegex = new(@"^[A-Z0-9._!#-]{8,}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex TransportNoiseRegex = new(@"\b\d+\s*(kb/s|mb/s|gb/s|fps|hz)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex BrowserTitleNoiseRegex = new(@"\s*[-|]\s*(YouTube|YouTube Music|SoundCloud|VK Музыка|VK Music|Spotify|Yandex Music|Яндекс Музыка)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex VideoLabelRegex = new(@"\s*[\[(](official\s+(music\s+)?video|official audio|lyrics?|lyric video|visualizer|audio)[\])]\s*", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Dictionary<string, AlbumColorPalette> PaletteCache = new();
+        private const int PaletteCacheLimit = 64;
 
         private static readonly AlbumColorPalette DefaultPalette = new()
         {
@@ -114,6 +119,23 @@ namespace DynamicIslandPC
             }
         }
 
+        public static AlbumColorPalette GetAlbumPaletteCached(BitmapSource bitmapSource, string cacheHint)
+        {
+            if (bitmapSource == null)
+                return DefaultPalette;
+
+            var key = $"{NormalizeWhitespace(cacheHint)}|{bitmapSource.PixelWidth}x{bitmapSource.PixelHeight}";
+            if (PaletteCache.TryGetValue(key, out var cached))
+                return cached;
+
+            var palette = GetAlbumPalette(bitmapSource);
+            if (PaletteCache.Count >= PaletteCacheLimit)
+                PaletteCache.Remove(PaletteCache.Keys.First());
+
+            PaletteCache[key] = palette;
+            return palette;
+        }
+
         public static string NormalizeSource(string sourceAppId)
         {
             if (string.IsNullOrWhiteSpace(sourceAppId))
@@ -159,7 +181,9 @@ namespace DynamicIslandPC
             if (string.IsNullOrWhiteSpace(sanitized))
                 return string.Empty;
 
-            return sanitized;
+            sanitized = BrowserTitleNoiseRegex.Replace(sanitized, string.Empty);
+            sanitized = VideoLabelRegex.Replace(sanitized, " ");
+            return NormalizeWhitespace(sanitized);
         }
 
         public static string SanitizeArtist(string artist)
@@ -171,6 +195,29 @@ namespace DynamicIslandPC
                 return string.Empty;
 
             return sanitized;
+        }
+
+        public static (string Title, string Artist) NormalizeBrowserMetadata(string title, string artist, string sourceApp)
+        {
+            var cleanTitle = SanitizeTitle(title);
+            var cleanArtist = SanitizeArtist(artist);
+            if (!IsBrowserSource(sourceApp) || !string.IsNullOrWhiteSpace(cleanArtist))
+                return (cleanTitle, cleanArtist);
+
+            var separators = new[] { " - ", " – ", " — " };
+            foreach (var separator in separators)
+            {
+                var parts = cleanTitle.Split(new[] { separator }, 2, StringSplitOptions.None);
+                if (parts.Length != 2)
+                    continue;
+
+                var possibleArtist = SanitizeArtist(parts[0]);
+                var possibleTitle = SanitizeTitle(parts[1]);
+                if (!string.IsNullOrWhiteSpace(possibleArtist) && !string.IsNullOrWhiteSpace(possibleTitle))
+                    return (possibleTitle, possibleArtist);
+            }
+
+            return (cleanTitle, cleanArtist);
         }
 
         public static string GetSourceBadgeLabel(string sourceApp)
@@ -220,6 +267,16 @@ namespace DynamicIslandPC
                 return Color.FromRgb(207, 207, 216);
 
             return Color.FromRgb(138, 138, 150);
+        }
+
+        public static bool IsBrowserSource(string sourceApp)
+        {
+            var source = NormalizeSource(sourceApp).ToLowerInvariant();
+            return source.Contains("browser") ||
+                   source.Contains("chrome") ||
+                   source.Contains("edge") ||
+                   source.Contains("firefox") ||
+                   source.Contains("opera");
         }
 
         private static Color BlendToward(byte r, byte g, byte b, double amount)

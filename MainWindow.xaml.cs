@@ -38,6 +38,11 @@ namespace DynamicIslandPC
         private string decorationMediaPath = "";
         private bool decorationIsVideo = false;
         private bool gamingModeEnabled = false;
+        private bool lockModeEnabled = false;
+        private bool startWithWindowsEnabled = false;
+        private bool browserSourceEnabled = true;
+        private System.Windows.Forms.ToolStripMenuItem trayTrackItem;
+        private System.Windows.Forms.ToolStripMenuItem trayPlayPauseItem;
         private AppSettings _settings;
         private DispatcherTimer _progressTimer;
         private DispatcherTimer _smartHideTimer;
@@ -72,6 +77,7 @@ namespace DynamicIslandPC
                 Opacity = 0;
                 _settings = SettingsService.Load();
                 ApplySettings(_settings);
+                ApplyStartupPreference();
                 ApplyInitialDisplayMode();
                 InitializeWindow();
                 ApplyIslandBackground(GetConfiguredBackgroundColor(), backgroundOpacity);
@@ -133,6 +139,7 @@ namespace DynamicIslandPC
         private void InitializeMusicService()
         {
             musicService = new MusicInfoService();
+            musicService.SetBrowserSourceEnabled(browserSourceEnabled);
             musicService.MusicInfoChanged += info => Dispatcher.Invoke(() => ApplyMusicInfo(info));
             ApplyMusicInfo(musicService.GetCurrentMusicInfo());
             InitializeProgressTimer();
@@ -213,7 +220,7 @@ namespace DynamicIslandPC
                 }
                 else
                 {
-                    CycleDisplayMode();
+                    CycleDisplayMode(force: true);
                 }
                 handled = true;
             }
@@ -222,6 +229,14 @@ namespace DynamicIslandPC
         
         private void CycleDisplayMode()
         {
+            CycleDisplayMode(force: false);
+        }
+
+        private void CycleDisplayMode(bool force)
+        {
+            if (lockModeEnabled && !force)
+                return;
+
             var now = DateTime.UtcNow;
             if ((now - _lastModeSwitchAt).TotalMilliseconds < 280)
                 return;
@@ -426,7 +441,8 @@ namespace DynamicIslandPC
 
             AlbumArtPaused.Source = musicInfo.AlbumArt;
             ApplySourceVisuals(musicInfo.SourceApp);
-            UpdateAlbumPalette(MusicVisualHelper.GetAlbumPalette(musicInfo.AlbumArt));
+            UpdateAlbumPalette(MusicVisualHelper.GetAlbumPaletteCached(musicInfo.AlbumArt, $"{musicInfo.Title}|{musicInfo.Artist}|{musicInfo.SourceApp}"));
+            UpdateTrayController(musicInfo);
             lastMusicInfo = musicInfo;
             UpdateSmartVisibility(musicInfo, trackChanged);
 
@@ -1207,6 +1223,44 @@ namespace DynamicIslandPC
                 Checked = gamingModeEnabled
             };
             contextMenu.Items.Add(gamingModeItem);
+
+            var lockModeItem = new System.Windows.Forms.ToolStripMenuItem("Lock mode", null, (s, e) => SetLockMode(!lockModeEnabled))
+            {
+                CheckOnClick = false,
+                Checked = lockModeEnabled
+            };
+            contextMenu.Items.Add(lockModeItem);
+
+            var startupItem = new System.Windows.Forms.ToolStripMenuItem("Start with Windows", null, (s, e) => SetStartWithWindows(!startWithWindowsEnabled))
+            {
+                CheckOnClick = false,
+                Checked = startWithWindowsEnabled
+            };
+            contextMenu.Items.Add(startupItem);
+
+            var sourcesMenu = new System.Windows.Forms.ToolStripMenuItem("Sources");
+            var browserSourceItem = new System.Windows.Forms.ToolStripMenuItem("Browser", null, (s, e) => SetBrowserSourceEnabled(!browserSourceEnabled))
+            {
+                CheckOnClick = false,
+                Checked = browserSourceEnabled
+            };
+            sourcesMenu.DropDownItems.Add(browserSourceItem);
+            contextMenu.Items.Add(sourcesMenu);
+
+            var controllerMenu = new System.Windows.Forms.ToolStripMenuItem("Controller");
+            trayTrackItem = new System.Windows.Forms.ToolStripMenuItem("No media") { Enabled = false };
+            var prevItem = new System.Windows.Forms.ToolStripMenuItem("Previous", null, (s, e) => musicService?.PreviousTrack());
+            trayPlayPauseItem = new System.Windows.Forms.ToolStripMenuItem("Play / Pause", null, (s, e) => musicService?.TogglePlayPause());
+            var nextItem = new System.Windows.Forms.ToolStripMenuItem("Next", null, (s, e) => musicService?.NextTrack());
+            controllerMenu.DropDownItems.Add(trayTrackItem);
+            controllerMenu.DropDownItems.Add(new System.Windows.Forms.ToolStripSeparator());
+            controllerMenu.DropDownItems.Add(prevItem);
+            controllerMenu.DropDownItems.Add(trayPlayPauseItem);
+            controllerMenu.DropDownItems.Add(nextItem);
+            contextMenu.Items.Add(controllerMenu);
+
+            contextMenu.Items.Add("Diagnostics...", null, (s, e) => OpenDiagnostics());
+            contextMenu.Items.Add("Check for updates...", null, async (s, e) => await CheckForUpdatesAsync());
             
             contextMenu.Items.Add("Выход", null, (s, e) => 
             {
@@ -1215,6 +1269,49 @@ namespace DynamicIslandPC
             });
             trayIcon.ContextMenuStrip = contextMenu;
             SyncTrayMenuState();
+        }
+
+        private void OpenDiagnostics()
+        {
+            var diagnosticsWindow = new DiagnosticsWindow(() => musicService?.GetDiagnostics() ?? "Music service is not initialized.");
+            diagnosticsWindow.Owner = this;
+            diagnosticsWindow.Show();
+        }
+
+        private async Task CheckForUpdatesAsync()
+        {
+            try
+            {
+                var info = await UpdateChecker.CheckAsync();
+                if (info.HasUpdate)
+                {
+                    var result = System.Windows.MessageBox.Show(
+                        $"New version is available: {info.LatestVersion}\nCurrent version: {info.CurrentVersion}\n\nOpen GitHub release page?",
+                        "Dynamic Island PC",
+                        System.Windows.MessageBoxButton.YesNo,
+                        System.Windows.MessageBoxImage.Information);
+
+                    if (result == System.Windows.MessageBoxResult.Yes)
+                        UpdateChecker.OpenRelease(info);
+                }
+                else
+                {
+                    System.Windows.MessageBox.Show(
+                        $"You are on the latest version: {info.CurrentVersion}",
+                        "Dynamic Island PC",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to check for updates", ex);
+                System.Windows.MessageBox.Show(
+                    "Failed to check for updates. Details were written to the log.",
+                    "Dynamic Island PC",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+            }
         }
         
         private void AnimateStartup()

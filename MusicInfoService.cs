@@ -11,6 +11,10 @@ namespace DynamicIslandPC
         public string Title { get; set; }
         public string Artist { get; set; }
         public string SourceApp { get; set; }
+        public string RawSourceApp { get; set; }
+        public string RawTitle { get; set; }
+        public string RawArtist { get; set; }
+        public int SessionScore { get; set; }
         public BitmapImage AlbumArt { get; set; }
         public bool IsPlaying { get; set; }
         public bool HasMedia { get; set; }
@@ -64,6 +68,16 @@ namespace DynamicIslandPC
                 info.AlbumArt = CreateDefaultAlbumArt();
             
             return info;
+        }
+
+        public string GetDiagnostics()
+        {
+            return smtcService.GetDiagnostics();
+        }
+
+        public void SetBrowserSourceEnabled(bool enabled)
+        {
+            smtcService.BrowserSourceEnabled = enabled;
         }
 
 

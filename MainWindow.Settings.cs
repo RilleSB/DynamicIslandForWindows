@@ -29,6 +29,9 @@ namespace DynamicIslandPC
             decorationEnabled = s.DecorationEnabled;
             decorationMediaPath = s.DecorationMediaPath ?? string.Empty;
             gamingModeEnabled = s.GamingModeEnabled;
+            lockModeEnabled = s.LockModeEnabled;
+            startWithWindowsEnabled = s.StartWithWindowsEnabled || StartupHelper.IsEnabled();
+            browserSourceEnabled = s.BrowserSourceEnabled;
         }
 
         private void SaveSettings()
@@ -45,6 +48,9 @@ namespace DynamicIslandPC
             _settings.DecorationEnabled = decorationEnabled;
             _settings.DecorationMediaPath = decorationMediaPath ?? string.Empty;
             _settings.GamingModeEnabled = gamingModeEnabled;
+            _settings.LockModeEnabled = lockModeEnabled;
+            _settings.StartWithWindowsEnabled = startWithWindowsEnabled;
+            _settings.BrowserSourceEnabled = browserSourceEnabled;
             SettingsService.Save(_settings);
         }
 
@@ -374,6 +380,54 @@ namespace DynamicIslandPC
             Logger.Log($"Gaming mode {(gamingModeEnabled ? "enabled" : "disabled")}");
         }
 
+        private void SetLockMode(bool enabled)
+        {
+            lockModeEnabled = enabled;
+            SyncTrayMenuState();
+            SaveSettings();
+            Logger.Log($"Lock mode {(lockModeEnabled ? "enabled" : "disabled")}");
+        }
+
+        private void SetStartWithWindows(bool enabled)
+        {
+            try
+            {
+                StartupHelper.SetEnabled(enabled);
+                startWithWindowsEnabled = StartupHelper.IsEnabled();
+                SyncTrayMenuState();
+                SaveSettings();
+                Logger.Log($"Startup with Windows {(startWithWindowsEnabled ? "enabled" : "disabled")}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to update startup setting", ex);
+            }
+        }
+
+        private void ApplyStartupPreference()
+        {
+            if (!startWithWindowsEnabled)
+                return;
+
+            try
+            {
+                StartupHelper.SetEnabled(true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to apply startup preference", ex);
+            }
+        }
+
+        private void SetBrowserSourceEnabled(bool enabled)
+        {
+            browserSourceEnabled = enabled;
+            musicService?.SetBrowserSourceEnabled(enabled);
+            SyncTrayMenuState();
+            SaveSettings();
+            Logger.Log($"Browser source {(browserSourceEnabled ? "enabled" : "disabled")}");
+        }
+
         private void ApplyClickThroughMode()
         {
             try
@@ -429,6 +483,33 @@ namespace DynamicIslandPC
 
             if (trayIcon.ContextMenuStrip.Items[3] is ToolStripMenuItem gamingItem)
                 gamingItem.Checked = gamingModeEnabled;
+
+            if (trayIcon.ContextMenuStrip.Items[4] is ToolStripMenuItem lockItem)
+                lockItem.Checked = lockModeEnabled;
+
+            if (trayIcon.ContextMenuStrip.Items[5] is ToolStripMenuItem startupItem)
+                startupItem.Checked = startWithWindowsEnabled;
+
+            if (trayIcon.ContextMenuStrip.Items[6] is ToolStripMenuItem sourcesMenu &&
+                sourcesMenu.DropDownItems.Count > 0 &&
+                sourcesMenu.DropDownItems[0] is ToolStripMenuItem browserItem)
+            {
+                browserItem.Checked = browserSourceEnabled;
+            }
+        }
+
+        private void UpdateTrayController(MusicInfo musicInfo)
+        {
+            if (trayTrackItem != null)
+            {
+                var title = string.IsNullOrWhiteSpace(musicInfo?.Title) ? "No media" : musicInfo.Title;
+                var artist = string.IsNullOrWhiteSpace(musicInfo?.Artist) ? musicInfo?.SourceApp : musicInfo.Artist;
+                var text = string.IsNullOrWhiteSpace(artist) ? title : $"{title} - {artist}";
+                trayTrackItem.Text = text.Length > 60 ? text.Substring(0, 57) + "..." : text;
+            }
+
+            if (trayPlayPauseItem != null)
+                trayPlayPauseItem.Text = musicInfo?.IsPlaying == true ? "Pause" : "Play";
         }
 
         private static Color MixBaseAndAccent(Color baseColor, Color accentColor, double accentAmount)

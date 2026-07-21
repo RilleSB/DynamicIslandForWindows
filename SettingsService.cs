@@ -18,6 +18,9 @@ namespace DynamicIslandPC
         public bool DecorationEnabled { get; set; } = true;
         public string DecorationMediaPath { get; set; } = "";
         public bool GamingModeEnabled { get; set; } = false;
+        public bool LockModeEnabled { get; set; } = false;
+        public bool StartWithWindowsEnabled { get; set; } = false;
+        public bool BrowserSourceEnabled { get; set; } = true;
     }
 
     public static class SettingsService
@@ -36,6 +39,19 @@ namespace DynamicIslandPC
             catch (Exception ex)
             {
                 Logger.Error("Failed to load settings", ex);
+                var backup = _path + ".bak";
+                try
+                {
+                    if (File.Exists(backup))
+                    {
+                        Logger.Log("Restoring settings from backup");
+                        return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(backup)) ?? new AppSettings();
+                    }
+                }
+                catch (Exception backupEx)
+                {
+                    Logger.Error("Failed to load settings backup", backupEx);
+                }
             }
             return new AppSettings();
         }
@@ -45,7 +61,15 @@ namespace DynamicIslandPC
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_path));
-                File.WriteAllText(_path, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
+                var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+                var tempPath = _path + ".tmp";
+                var backupPath = _path + ".bak";
+
+                File.WriteAllText(tempPath, json);
+                if (File.Exists(_path))
+                    File.Copy(_path, backupPath, overwrite: true);
+                File.Copy(tempPath, _path, overwrite: true);
+                File.Delete(tempPath);
             }
             catch (Exception ex)
             {
