@@ -18,6 +18,7 @@ namespace DynamicIslandPC
         private void ApplySettings(AppSettings s)
         {
             scale = s.Scale;
+            displayMode = Math.Clamp(s.DisplayMode, 0, 2);
             isTopPosition = s.IsTopPosition;
             customX = s.CustomX;
             customY = s.CustomY;
@@ -33,6 +34,7 @@ namespace DynamicIslandPC
         private void SaveSettings()
         {
             _settings.Scale = scale;
+            _settings.DisplayMode = displayMode;
             _settings.IsTopPosition = isTopPosition;
             _settings.CustomX = customX;
             _settings.CustomY = customY;

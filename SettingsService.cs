@@ -9,6 +9,7 @@ namespace DynamicIslandPC
         public double CustomX { get; set; } = -1;
         public double CustomY { get; set; } = -1;
         public bool IsTopPosition { get; set; } = true;
+        public int DisplayMode { get; set; } = 0;
         public bool IsDarkTheme { get; set; } = true;
         public double Scale { get; set; } = 1.0;
         public string BackgroundColor { get; set; } = "#FF000000";

@@ -72,6 +72,7 @@ namespace DynamicIslandPC
                 Opacity = 0;
                 _settings = SettingsService.Load();
                 ApplySettings(_settings);
+                ApplyInitialDisplayMode();
                 InitializeWindow();
                 ApplyIslandBackground(GetConfiguredBackgroundColor(), backgroundOpacity);
                 SetTheme(isDarkTheme, applyBackground: false);
@@ -228,6 +229,24 @@ namespace DynamicIslandPC
             _lastModeSwitchAt = now;
             displayMode = (displayMode + 1) % 3;
             AnimateToMode();
+            SaveSettings();
+        }
+
+        private void ApplyInitialDisplayMode()
+        {
+            displayMode = Math.Clamp(displayMode, 0, 2);
+            var (baseWidth, baseHeight) = GetModeSize(displayMode);
+            Width = baseWidth * scale;
+            Height = baseHeight * scale;
+
+            PausedMode.Visibility = Visibility.Collapsed;
+            MinimalMode.Visibility = displayMode == 0 ? Visibility.Visible : Visibility.Collapsed;
+            CompactMode.Visibility = displayMode == 1 ? Visibility.Visible : Visibility.Collapsed;
+            ExpandedMode.Visibility = displayMode == 2 ? Visibility.Visible : Visibility.Collapsed;
+
+            MinimalMode.Opacity = 1;
+            CompactMode.Opacity = 1;
+            ExpandedMode.Opacity = 1;
         }
 
         private void AnimateToMode()

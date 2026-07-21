@@ -17,7 +17,7 @@ namespace DynamicIslandPC
     {
         private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
         private static readonly Regex HexIdRegex = new(@"^[A-F0-9]{8,}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        private static readonly Regex OpaqueIdRegex = new(@"^[A-Z0-9_-]{8,}$", RegexOptions.Compiled);
+        private static readonly Regex OpaqueIdRegex = new(@"^[A-Z0-9._!#-]{8,}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex TransportNoiseRegex = new(@"\b\d+\s*(kb/s|mb/s|gb/s|fps|hz)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly AlbumColorPalette DefaultPalette = new()
@@ -311,14 +311,16 @@ namespace DynamicIslandPC
             var candidate = value.Trim();
             if (candidate.Contains(' '))
                 return false;
-            if (HexIdRegex.IsMatch(candidate))
+
+            var compactCandidate = Regex.Replace(candidate, @"[._!#-]", string.Empty);
+            if (HexIdRegex.IsMatch(compactCandidate))
                 return true;
             if (!OpaqueIdRegex.IsMatch(candidate))
                 return false;
 
-            var digitCount = candidate.Count(char.IsDigit);
-            var upperCount = candidate.Count(char.IsUpper);
-            return digitCount >= 3 && upperCount >= 3;
+            var digitCount = compactCandidate.Count(char.IsDigit);
+            var letterCount = compactCandidate.Count(char.IsLetter);
+            return compactCandidate.Length >= 8 && digitCount >= 3 && letterCount >= 3;
         }
 
         private sealed class ColorBucket
