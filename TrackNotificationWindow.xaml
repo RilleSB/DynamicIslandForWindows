@@ -8,13 +8,23 @@
         IsHitTestVisible="False"
         Topmost="True"
         SizeToContent="WidthAndHeight">
-    <Border Background="#CC000000" CornerRadius="12" Padding="14,7">
-        <TextBlock x:Name="NotificationText"
-                   Foreground="White"
-                   FontSize="13"
-                   FontFamily="Segoe UI"
-                   TextTrimming="CharacterEllipsis"
-                   MaxWidth="280"
-                   VerticalAlignment="Center"/>
-    </Border>
+    <Grid Margin="12">
+        <Border Background="#F20B0B0E" CornerRadius="18" Padding="16,8"
+                BorderBrush="#28FFFFFF" BorderThickness="1">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Color="#000000" Opacity="0.55"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="🎵" FontSize="11" Margin="0,0,8,0" VerticalAlignment="Center" Opacity="0.85"/>
+                <TextBlock x:Name="NotificationText"
+                           Foreground="White"
+                           FontSize="12"
+                           FontWeight="Medium"
+                           FontFamily="Segoe UI Variable Text, Segoe UI"
+                           TextTrimming="CharacterEllipsis"
+                           MaxWidth="320"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+    </Grid>
 </Window>

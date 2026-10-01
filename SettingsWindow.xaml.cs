@@ -19,6 +19,9 @@ namespace DynamicIslandPC
         private bool adaptiveAlbumThemeEnabled = true;
         private bool decorationEnabled = true;
         private string decorationMediaPath = "";
+        private bool liquidGlassEnabled = false;
+        private string targetMonitorDeviceName = "";
+        private bool excludeFromCapture = false;
 
         private readonly AppSettings settings;
         private readonly Action<double, double> onPositionChanged;
@@ -26,7 +29,10 @@ namespace DynamicIslandPC
         private readonly Action<Color, double> onBackgroundChanged;
         private readonly Action<bool> onAdaptiveAlbumThemeChanged;
         private readonly Action<bool, string> onDecorationChanged;
-        private readonly Forms.Screen currentScreen;
+        private readonly Action<bool> onLiquidGlassChanged;
+        private readonly Action<string> onMonitorChanged;
+        private readonly Action<bool> onExcludeFromCaptureChanged;
+        private Forms.Screen currentScreen;
 
         public SettingsWindow(
             double currentX,
@@ -36,7 +42,10 @@ namespace DynamicIslandPC
             Action<bool> themeChangedCallback = null,
             Action<Color, double> backgroundChangedCallback = null,
             Action<bool> adaptiveAlbumThemeChangedCallback = null,
-            Action<bool, string> decorationChangedCallback = null)
+            Action<bool, string> decorationChangedCallback = null,
+            Action<bool> liquidGlassChangedCallback = null,
+            Action<string> monitorChangedCallback = null,
+            Action<bool> excludeFromCaptureChangedCallback = null)
         {
             InitializeComponent();
 
@@ -46,6 +55,9 @@ namespace DynamicIslandPC
             onBackgroundChanged = backgroundChangedCallback;
             onAdaptiveAlbumThemeChanged = adaptiveAlbumThemeChangedCallback;
             onDecorationChanged = decorationChangedCallback;
+            onLiquidGlassChanged = liquidGlassChangedCallback;
+            onMonitorChanged = monitorChangedCallback;
+            onExcludeFromCaptureChanged = excludeFromCaptureChangedCallback;
 
             isDarkTheme = settings.IsDarkTheme;
             backgroundColorHex = string.IsNullOrWhiteSpace(settings.BackgroundColor) ? "#FF000000" : settings.BackgroundColor;
@@ -53,8 +65,37 @@ namespace DynamicIslandPC
             adaptiveAlbumThemeEnabled = settings.AdaptiveAlbumThemeEnabled;
             decorationEnabled = settings.DecorationEnabled;
             decorationMediaPath = settings.DecorationMediaPath ?? string.Empty;
+            liquidGlassEnabled = settings.LiquidGlassEnabled;
+            targetMonitorDeviceName = settings.TargetMonitorDeviceName ?? string.Empty;
+            excludeFromCapture = settings.ExcludeFromCapture;
 
+            var screens = Forms.Screen.AllScreens;
+            int selectedMonitorIndex = 0;
             currentScreen = Forms.Screen.FromPoint(new System.Drawing.Point((int)Math.Round(currentX), (int)Math.Round(currentY)));
+
+            for (int i = 0; i < screens.Length; i++)
+            {
+                var s = screens[i];
+                var primary = s.Primary ? " (Основной)" : "";
+                MonitorComboBox.Items.Add($"Монитор {i + 1}{primary} — {s.Bounds.Width}×{s.Bounds.Height}");
+
+                if (!string.IsNullOrWhiteSpace(targetMonitorDeviceName) &&
+                    string.Equals(s.DeviceName, targetMonitorDeviceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedMonitorIndex = i;
+                    currentScreen = s;
+                }
+                else if (string.IsNullOrWhiteSpace(targetMonitorDeviceName) && s.DeviceName == currentScreen.DeviceName)
+                {
+                    selectedMonitorIndex = i;
+                }
+            }
+
+            if (screens.Length > 0 && selectedMonitorIndex < screens.Length)
+            {
+                MonitorComboBox.SelectedIndex = selectedMonitorIndex;
+            }
+
             var workingArea = currentScreen.WorkingArea;
 
             isUpdating = true;
@@ -74,6 +115,8 @@ namespace DynamicIslandPC
             BackgroundOpacitySlider.Value = backgroundOpacity * 100.0;
             AdaptiveAlbumThemeCheckBox.IsChecked = adaptiveAlbumThemeEnabled;
             DecorationEnabledCheckBox.IsChecked = decorationEnabled;
+            LiquidGlassCheckBox.IsChecked = liquidGlassEnabled;
+            ExcludeFromCaptureCheckBox.IsChecked = excludeFromCapture;
             isUpdating = false;
 
             UpdateThemeButtons();
@@ -405,6 +448,54 @@ namespace DynamicIslandPC
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
             return ext is ".mp4" or ".m4v" or ".mov" or ".wmv" or ".avi" or ".webm" or ".mkv";
+        }
+
+        private void MonitorComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+            var screens = Forms.Screen.AllScreens;
+            if (MonitorComboBox.SelectedIndex < 0 || MonitorComboBox.SelectedIndex >= screens.Length)
+                return;
+
+            currentScreen = screens[MonitorComboBox.SelectedIndex];
+            targetMonitorDeviceName = currentScreen.DeviceName;
+            settings.TargetMonitorDeviceName = targetMonitorDeviceName;
+
+            var workingArea = currentScreen.WorkingArea;
+            isUpdating = true;
+            SliderX.Minimum = workingArea.Left;
+            SliderX.Maximum = workingArea.Right;
+            SliderY.Minimum = workingArea.Top;
+            SliderY.Maximum = workingArea.Bottom;
+
+            // Центрируем остров на выбранном мониторе
+            PositionX = workingArea.Left + workingArea.Width / 2.0;
+            PositionY = workingArea.Top + 20;
+
+            SliderX.Value = PositionX;
+            SliderY.Value = PositionY;
+            TextX.Text = ((int)PositionX).ToString();
+            TextY.Text = ((int)PositionY).ToString();
+            isUpdating = false;
+
+            onMonitorChanged?.Invoke(targetMonitorDeviceName);
+            onPositionChanged?.Invoke(PositionX, PositionY);
+        }
+
+        private void ExcludeFromCaptureChanged(object sender, RoutedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+            excludeFromCapture = ExcludeFromCaptureCheckBox.IsChecked == true;
+            settings.ExcludeFromCapture = excludeFromCapture;
+            onExcludeFromCaptureChanged?.Invoke(excludeFromCapture);
+        }
+
+        private void LiquidGlassChanged(object sender, RoutedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+            liquidGlassEnabled = LiquidGlassCheckBox.IsChecked == true;
+            settings.LiquidGlassEnabled = liquidGlassEnabled;
+            onLiquidGlassChanged?.Invoke(liquidGlassEnabled);
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)

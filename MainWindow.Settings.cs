@@ -14,6 +14,9 @@ namespace DynamicIslandPC
         private Color albumAccentColor = Color.FromRgb(88, 88, 96);
         private AlbumColorPalette albumPalette = MusicVisualHelper.GetAlbumPalette(null);
         private bool adaptiveAlbumThemeEnabled = true;
+        private bool liquidGlassEnabled = false;
+        private string targetMonitorDeviceName = "";
+        private bool excludeFromCapture = false;
 
         private void ApplySettings(AppSettings s)
         {
@@ -32,6 +35,11 @@ namespace DynamicIslandPC
             lockModeEnabled = s.LockModeEnabled;
             startWithWindowsEnabled = s.StartWithWindowsEnabled || StartupHelper.IsEnabled();
             browserSourceEnabled = s.BrowserSourceEnabled;
+            liquidGlassEnabled = s.LiquidGlassEnabled;
+            targetMonitorDeviceName = s.TargetMonitorDeviceName ?? string.Empty;
+            excludeFromCapture = s.ExcludeFromCapture;
+            ApplyLiquidGlassStyle(liquidGlassEnabled);
+            ApplyDisplayAffinity(excludeFromCapture);
         }
 
         private void SaveSettings()
@@ -51,7 +59,15 @@ namespace DynamicIslandPC
             _settings.LockModeEnabled = lockModeEnabled;
             _settings.StartWithWindowsEnabled = startWithWindowsEnabled;
             _settings.BrowserSourceEnabled = browserSourceEnabled;
+            _settings.LiquidGlassEnabled = liquidGlassEnabled;
+            _settings.TargetMonitorDeviceName = targetMonitorDeviceName;
+            _settings.ExcludeFromCapture = excludeFromCapture;
             SettingsService.Save(_settings);
+        }
+
+        private double GetEffectiveBackgroundOpacity()
+        {
+            return liquidGlassEnabled ? 0.40 : backgroundOpacity;
         }
 
         private void ApplyIslandBackground(Color color, double opacity)
@@ -66,7 +82,7 @@ namespace DynamicIslandPC
             }
 
             brush.Color = color;
-            brush.Opacity = backgroundOpacity;
+            brush.Opacity = GetEffectiveBackgroundOpacity();
         }
 
         private void UpdateAlbumAccent(Color accentColor, bool animated = true)
@@ -83,6 +99,7 @@ namespace DynamicIslandPC
         {
             albumPalette = palette ?? MusicVisualHelper.GetAlbumPalette(null);
             albumAccentColor = albumPalette.Primary;
+            UpdateEqualizerColors(albumPalette.Primary);
 
             if (!adaptiveAlbumThemeEnabled)
             {
@@ -101,7 +118,7 @@ namespace DynamicIslandPC
             if (!animated)
             {
                 brush.Color = target;
-                brush.Opacity = backgroundOpacity;
+                brush.Opacity = GetEffectiveBackgroundOpacity();
                 UpdateAlbumAura(animated: false);
                 return;
             }
@@ -113,7 +130,7 @@ namespace DynamicIslandPC
                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
             };
             brush.BeginAnimation(SolidColorBrush.ColorProperty, colorAnimation);
-            brush.Opacity = backgroundOpacity;
+            brush.Opacity = GetEffectiveBackgroundOpacity();
             UpdateAlbumAura(animated: true);
         }
 
@@ -132,13 +149,13 @@ namespace DynamicIslandPC
                     Duration = TimeSpan.FromMilliseconds(360),
                     EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
                 });
-                brush.Opacity = backgroundOpacity;
+                brush.Opacity = GetEffectiveBackgroundOpacity();
             }
             else
             {
                 brush.BeginAnimation(SolidColorBrush.ColorProperty, null);
                 brush.Color = target;
-                brush.Opacity = backgroundOpacity;
+                brush.Opacity = GetEffectiveBackgroundOpacity();
             }
 
             ClearAlbumAura(animated);
@@ -192,8 +209,32 @@ namespace DynamicIslandPC
             }
         }
 
+        private Screen GetTargetScreen()
+        {
+            if (!string.IsNullOrWhiteSpace(targetMonitorDeviceName))
+            {
+                foreach (var s in Screen.AllScreens)
+                {
+                    if (string.Equals(s.DeviceName, targetMonitorDeviceName, StringComparison.OrdinalIgnoreCase))
+                        return s;
+                }
+            }
+
+            if (customX >= 0 || customY >= 0)
+            {
+                var point = new System.Drawing.Point((int)Math.Round(customX >= 0 ? customX : Left), (int)Math.Round(customY >= 0 ? customY : Top));
+                return Screen.FromPoint(point);
+            }
+
+            return Screen.PrimaryScreen ?? (Screen.AllScreens.Length > 0 ? Screen.AllScreens[0] : null);
+        }
+
         private Rect GetTargetWorkingArea(double anchorX, double anchorY)
         {
+            var targetScreen = GetTargetScreen();
+            if (targetScreen != null)
+                return new Rect(targetScreen.WorkingArea.Left, targetScreen.WorkingArea.Top, targetScreen.WorkingArea.Width, targetScreen.WorkingArea.Height);
+
             var point = new System.Drawing.Point((int)Math.Round(anchorX), (int)Math.Round(anchorY));
             var screen = Screen.FromPoint(point);
             return new Rect(screen.WorkingArea.Left, screen.WorkingArea.Top, screen.WorkingArea.Width, screen.WorkingArea.Height);
@@ -201,21 +242,16 @@ namespace DynamicIslandPC
 
         private (double left, double top) CalculateWindowPosition(double targetWidth, double targetHeight)
         {
+            var workingArea = GetTargetWorkingArea(customX, customY);
             if (customX >= 0 && customY >= 0)
             {
-                var workingArea = GetTargetWorkingArea(customX, customY);
                 var left = Math.Clamp(customX - targetWidth / 2, workingArea.Left, workingArea.Right - targetWidth);
                 var top = Math.Clamp(customY, workingArea.Top, workingArea.Bottom - targetHeight);
                 return (left, top);
             }
 
-            var anchorX = Left + (Width / 2);
-            if (double.IsNaN(anchorX) || double.IsInfinity(anchorX) || anchorX <= 0)
-                anchorX = SystemParameters.PrimaryScreenWidth / 2;
-
-            var working = GetTargetWorkingArea(anchorX, Top);
-            var centeredLeft = working.Left + (working.Width - targetWidth) / 2;
-            var topPosition = isTopPosition ? working.Top + 20 : working.Bottom - targetHeight - 60;
+            var centeredLeft = workingArea.Left + (workingArea.Width - targetWidth) / 2;
+            var topPosition = isTopPosition ? workingArea.Top + 20 : workingArea.Bottom - targetHeight - 60;
             return (centeredLeft, topPosition);
         }
 
@@ -277,6 +313,18 @@ namespace DynamicIslandPC
                     (enabled, mediaPath) =>
                     {
                         SetDecoration(enabled, mediaPath);
+                    },
+                    enabled =>
+                    {
+                        SetLiquidGlass(enabled);
+                    },
+                    monitor =>
+                    {
+                        SetTargetMonitor(monitor);
+                    },
+                    exclude =>
+                    {
+                        SetExcludeFromCapture(exclude);
                     });
 
                 settingsWindow.Owner = this;
@@ -378,6 +426,115 @@ namespace DynamicIslandPC
             SyncTrayMenuState();
             SaveSettings();
             Logger.Log($"Gaming mode {(gamingModeEnabled ? "enabled" : "disabled")}");
+        }
+
+        private void SetTargetMonitor(string monitorDeviceName)
+        {
+            targetMonitorDeviceName = monitorDeviceName ?? string.Empty;
+            SaveSettings();
+            AnimateToMode();
+            Logger.Log($"Target monitor changed to {targetMonitorDeviceName}");
+        }
+
+        private void SetExcludeFromCapture(bool exclude)
+        {
+            excludeFromCapture = exclude;
+            ApplyDisplayAffinity(exclude);
+            SaveSettings();
+            Logger.Log($"Exclude from capture set to {excludeFromCapture}");
+        }
+
+        private void ApplyDisplayAffinity(bool exclude)
+        {
+            try
+            {
+                var helper = new System.Windows.Interop.WindowInteropHelper(this);
+                if (helper.Handle == IntPtr.Zero) return;
+
+                const uint WDA_NONE = 0x00000000;
+                const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
+                const uint WDA_MONITOR = 0x00000001;
+
+                uint affinity = exclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
+                bool ok = SetWindowDisplayAffinity(helper.Handle, affinity);
+                if (!ok && exclude)
+                {
+                    SetWindowDisplayAffinity(helper.Handle, WDA_MONITOR);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to apply window display affinity", ex);
+            }
+        }
+
+        private void SetLiquidGlass(bool enabled)
+        {
+            liquidGlassEnabled = enabled;
+            ApplyLiquidGlassStyle(enabled);
+            SaveSettings();
+            Logger.Log($"Liquid Glass mode {(liquidGlassEnabled ? "enabled" : "disabled")}");
+        }
+
+        private void ApplyLiquidGlassStyle(bool enabled)
+        {
+            if (LiquidGlassLayer != null)
+                LiquidGlassLayer.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+
+            if (AlbumAuraBorder != null)
+                AlbumAuraBorder.Opacity = enabled ? 0.85 : 0.55;
+
+            if (IslandBorder != null)
+            {
+                if (IslandBorder.Background is SolidColorBrush bgBrush)
+                {
+                    bgBrush.Opacity = GetEffectiveBackgroundOpacity();
+                }
+
+                if (enabled)
+                {
+                    IslandBorder.BorderThickness = new Thickness(1.5);
+                    IslandBorder.BorderBrush = new LinearGradientBrush
+                    {
+                        StartPoint = new Point(0, 0),
+                        EndPoint = new Point(0, 1),
+                        GradientStops = new GradientStopCollection
+                        {
+                            new GradientStop(Color.FromArgb(235, 255, 255, 255), 0),
+                            new GradientStop(Color.FromArgb(70, 255, 255, 255), 0.25),
+                            new GradientStop(Color.FromArgb(20, 255, 255, 255), 0.65),
+                            new GradientStop(Color.FromArgb(90, 255, 255, 255), 1.0)
+                        }
+                    };
+
+                    IslandBorder.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        BlurRadius = 36,
+                        ShadowDepth = 6,
+                        Direction = 270,
+                        Color = Colors.Black,
+                        Opacity = 0.60
+                    };
+                }
+                else
+                {
+                    IslandBorder.BorderThickness = new Thickness(1);
+                    IslandBorder.BorderBrush = new LinearGradientBrush
+                    {
+                        StartPoint = new Point(0, 0),
+                        EndPoint = new Point(0, 1),
+                        GradientStops = new GradientStopCollection
+                        {
+                            new GradientStop(Color.FromArgb(46, 255, 255, 255), 0),
+                            new GradientStop(Color.FromArgb(18, 255, 255, 255), 1)
+                        }
+                    };
+
+                    IslandBorder.Effect = null;
+                }
+            }
+
+            UpdateAlbumPalette(albumPalette, animated: false);
         }
 
         private void SetLockMode(bool enabled)
@@ -502,14 +659,14 @@ namespace DynamicIslandPC
         {
             if (trayTrackItem != null)
             {
-                var title = string.IsNullOrWhiteSpace(musicInfo?.Title) ? "No media" : musicInfo.Title;
+                var title = string.IsNullOrWhiteSpace(musicInfo?.Title) ? "Нет медиа" : musicInfo.Title;
                 var artist = string.IsNullOrWhiteSpace(musicInfo?.Artist) ? musicInfo?.SourceApp : musicInfo.Artist;
                 var text = string.IsNullOrWhiteSpace(artist) ? title : $"{title} - {artist}";
                 trayTrackItem.Text = text.Length > 60 ? text.Substring(0, 57) + "..." : text;
             }
 
             if (trayPlayPauseItem != null)
-                trayPlayPauseItem.Text = musicInfo?.IsPlaying == true ? "Pause" : "Play";
+                trayPlayPauseItem.Text = musicInfo?.IsPlaying == true ? "Пауза" : "Воспроизведение";
         }
 
         private static Color MixBaseAndAccent(Color baseColor, Color accentColor, double accentAmount)

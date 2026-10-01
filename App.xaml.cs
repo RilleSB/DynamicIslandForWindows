@@ -10,6 +10,7 @@ namespace DynamicIslandPC
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            RefreshRateHelper.InitializeHighRefreshRate();
             base.OnStartup(e);
 
             _singleInstanceMutex = new Mutex(true, "DynamicIslandPC.SingleInstance", out bool createdNew);

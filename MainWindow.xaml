@@ -12,124 +12,228 @@
         ResizeMode="NoResize">
 
     <Window.Resources>
-        <Style x:Key="ControlButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#14FFFFFF"/>
+        <!-- Modern Round Media Button Style -->
+        <Style x:Key="ModernMediaButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#1AFFFFFF"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderBrush" Value="#24FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#22FFFFFF"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Width" Value="28"/>
-            <Setter Property="Height" Value="28"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="btnBorder" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="14">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
+                                CornerRadius="16">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#28FFFFFF"/>
-                                <Setter Property="BorderBrush" Value="#42FFFFFF"/>
+                                <Setter TargetName="btnBorder" Property="Background" Value="#32FFFFFF"/>
+                                <Setter TargetName="btnBorder" Property="BorderBrush" Value="#48FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="btnBorder" Property="Background" Value="#4AFFFFFF"/>
+                                <Setter TargetName="btnBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.92" ScaleY="0.92" CenterX="16" CenterY="16"/>
+                                    </Setter.Value>
+                                </Setter>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Primary Play/Pause Button (High Contrast Pill) -->
+        <Style x:Key="ModernPrimaryMediaButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0A0A0C"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="38"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="btnBorder" Background="{TemplateBinding Background}"
+                                CornerRadius="19">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="12" ShadowDepth="0" Color="#FFFFFF" Opacity="0.3"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="btnBorder" Property="Background" Value="#EDEDED"/>
+                                <Setter TargetName="btnBorder" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect BlurRadius="16" ShadowDepth="0" Color="#FFFFFF" Opacity="0.5"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="btnBorder" Property="Background" Value="#D6D6D6"/>
+                                <Setter TargetName="btnBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.92" ScaleY="0.92" CenterX="19" CenterY="19"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Backwards-compatible ControlButtonStyle alias -->
+        <Style x:Key="ControlButtonStyle" TargetType="Button" BasedOn="{StaticResource ModernMediaButtonStyle}"/>
     </Window.Resources>
 
     <Grid ClipToBounds="False">
+        <!-- Main Island Capsule -->
         <Border x:Name="IslandBorder"
-                CornerRadius="35"
-                BorderBrush="#2AFFFFFF"
+                CornerRadius="30"
                 BorderThickness="1"
                 ClipToBounds="False">
+            <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#2EFFFFFF" Offset="0"/>
+                    <GradientStop Color="#12FFFFFF" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.BorderBrush>
             <Border.Background>
-                <SolidColorBrush Color="#000000" Opacity="0.7"/>
+                <SolidColorBrush Color="#0B0B0E" Opacity="0.94"/>
             </Border.Background>
 
             <Grid>
-                <Border x:Name="AlbumAuraBorder" CornerRadius="35" Margin="1" IsHitTestVisible="False" Opacity="0.72">
+                <!-- Dynamic Album Ambient Aura -->
+                <Border x:Name="AlbumAuraBorder" CornerRadius="30" Margin="1" IsHitTestVisible="False" Opacity="0.55">
                     <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <RadialGradientBrush Center="0.15,0.5" GradientOrigin="0.15,0.5" RadiusX="0.9" RadiusY="1.2">
                             <GradientStop x:Name="AlbumAuraPrimaryStop" Color="#223C3C44" Offset="0"/>
                             <GradientStop x:Name="AlbumAuraSecondaryStop" Color="#141E1E24" Offset="0.55"/>
-                            <GradientStop x:Name="AlbumAuraTertiaryStop" Color="#08000000" Offset="1"/>
-                        </LinearGradientBrush>
+                            <GradientStop x:Name="AlbumAuraTertiaryStop" Color="#00000000" Offset="1"/>
+                        </RadialGradientBrush>
                     </Border.Background>
                 </Border>
 
-                <Border CornerRadius="35" Margin="1" IsHitTestVisible="False" Opacity="0.85">
+                <!-- Subtle Top Edge Light -->
+                <Border CornerRadius="30" Margin="1" IsHitTestVisible="False" Opacity="0.45" VerticalAlignment="Top" Height="18">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                            <GradientStop Color="#2DFFFFFF" Offset="0"/>
-                            <GradientStop Color="#12FFFFFF" Offset="0.32"/>
+                            <GradientStop Color="#25FFFFFF" Offset="0"/>
                             <GradientStop Color="#00FFFFFF" Offset="1"/>
                         </LinearGradientBrush>
                     </Border.Background>
                 </Border>
 
-                <Border CornerRadius="35" Margin="1" IsHitTestVisible="False" VerticalAlignment="Top" Height="24" Opacity="0.65">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                            <GradientStop Color="#38FFFFFF" Offset="0"/>
-                            <GradientStop Color="#00FFFFFF" Offset="1"/>
-                        </LinearGradientBrush>
-                    </Border.Background>
-                </Border>
+                <!-- Liquid Glass Specular & Refraction Layers (Experimental) -->
+                <Grid x:Name="LiquidGlassLayer" Visibility="Collapsed" IsHitTestVisible="False">
+                    <!-- Subtle Diagonal Glass Sheen -->
+                    <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" Opacity="0.28">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#80FFFFFF" Offset="0"/>
+                                <GradientStop Color="#20FFFFFF" Offset="0.25"/>
+                                <GradientStop Color="#00FFFFFF" Offset="0.6"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+
+                    <!-- Convex Lens Glare on top edge -->
+                    <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" VerticalAlignment="Top" Height="42" Opacity="0.85">
+                        <Border.Background>
+                            <RadialGradientBrush Center="0.5,0.0" GradientOrigin="0.5,0.0" RadiusX="0.65" RadiusY="0.95">
+                                <GradientStop Color="#A0FFFFFF" Offset="0"/>
+                                <GradientStop Color="#35FFFFFF" Offset="0.35"/>
+                                <GradientStop Color="#08FFFFFF" Offset="0.7"/>
+                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            </RadialGradientBrush>
+                        </Border.Background>
+                    </Border>
+
+                    <!-- Crystal Inner Bevel Rim Highlight (Refraction edge) -->
+                    <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" Margin="1" BorderThickness="1.2">
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#B5FFFFFF" Offset="0"/>
+                                <GradientStop Color="#25FFFFFF" Offset="0.3"/>
+                                <GradientStop Color="#08FFFFFF" Offset="0.65"/>
+                                <GradientStop Color="#40FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                    </Border>
+
+                    <!-- Liquid Caustic Under-glow Reflection -->
+                    <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" VerticalAlignment="Bottom" Height="28" Opacity="0.5">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                <GradientStop Color="#48FFFFFF" Offset="0"/>
+                                <GradientStop Color="#10FFFFFF" Offset="0.4"/>
+                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Grid>
 
                 <Grid>
+                    <!-- Track Reveal Overlay -->
                     <Border x:Name="TrackRevealOverlay"
                             Visibility="Collapsed"
                             Opacity="0"
                             CornerRadius="22"
                             Margin="8"
-                            Height="50"
+                            Height="46"
                             VerticalAlignment="Center"
-                            Background="#C0141418"
-                            BorderBrush="#2EFFFFFF"
+                            Background="#E6101014"
+                            BorderBrush="#35FFFFFF"
                             BorderThickness="1"
                             Panel.ZIndex="20"
                             IsHitTestVisible="False">
-                        <Grid Margin="10,7">
+                        <Grid Margin="10,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Border Width="34" Height="34" CornerRadius="10" Background="#1EFFFFFF">
-                                <Image x:Name="RevealAlbumArt" Width="30" Height="30" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="RevealAlbumArt" Width="34" Height="34" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,30,30" RadiusX="8" RadiusY="8"/>
+                                        <RectangleGeometry Rect="0,0,34,34" RadiusX="10" RadiusY="10"/>
                                     </Image.Clip>
                                 </Image>
                             </Border>
                             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="RevealTitleText" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Name="RevealSubtitleText" Foreground="#C4C4CC" FontSize="8.5" Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="RevealSubtitleText" Foreground="#A0A0A8" FontSize="9" Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="RevealSourceText" Foreground="#7A7A84" FontSize="8" Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </Grid>
                     </Border>
 
+                    <!-- 1. Paused Mode: Round Capsule -->
                     <Grid x:Name="PausedMode" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Grid Width="56" Height="56">
-                            <Ellipse Fill="#18FFFFFF" Stroke="#28FFFFFF" StrokeThickness="1"/>
-                            <Image x:Name="AlbumArtPaused" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Image.Clip>
-                                    <EllipseGeometry Center="23,23" RadiusX="23" RadiusY="23"/>
-                                </Image.Clip>
-                            </Image>
-                            <Border Width="24" Height="24" CornerRadius="12" Background="#B8000000" BorderBrush="#30FFFFFF" BorderThickness="1"
+                            <Border Width="56" Height="56" CornerRadius="28" Background="#18FFFFFF" BorderBrush="#25FFFFFF" BorderThickness="0.8">
+                                <Image x:Name="AlbumArtPaused" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Border>
+                            <Border Width="22" Height="22" CornerRadius="11" Background="#D9000000" BorderBrush="#35FFFFFF" BorderThickness="0.8"
                                     HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                                <TextBlock Text="⏸" Foreground="White" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Path Fill="White" Width="8" Height="8" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Data="M 3 2 L 5 2 L 5 10 L 3 10 Z M 7 2 L 9 2 L 9 10 L 7 10 Z"/>
                             </Border>
                         </Grid>
                     </Grid>
 
+                    <!-- 2. Minimal Mode: 138x60 Capsule (Squircle Art + 4-bar Waveform) -->
                     <Grid x:Name="MinimalMode" Visibility="Visible">
                         <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Grid.ColumnDefinitions>
@@ -137,48 +241,60 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <Grid Grid.Column="0">
-                                <Ellipse Width="54" Height="54" Fill="#1CFFFFFF"/>
-                                <Image x:Name="AlbumArtMinimal" Width="46" Height="46" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
+                            <!-- Squircle Album Art -->
+                            <Border Grid.Column="0" Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="0.8">
+                                <Image x:Name="AlbumArtMinimal" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image.Clip>
-                                        <EllipseGeometry Center="23,23" RadiusX="23" RadiusY="23"/>
+                                        <RectangleGeometry Rect="0,0,46,46" RadiusX="12" RadiusY="12"/>
                                     </Image.Clip>
                                     <Image.RenderTransform>
                                         <RotateTransform x:Name="AlbumArtMinimalRotation" Angle="0"/>
                                     </Image.RenderTransform>
                                 </Image>
-                            </Grid>
+                            </Border>
 
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
-                                <StackPanel x:Name="PlaybackIndicatorMinimal" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0" Visibility="Collapsed">
-                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2,0">
+                            <!-- Right: Waveform Equalizer -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                                <StackPanel x:Name="PlaybackIndicatorMinimal" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2.5,0">
                                         <Rectangle.Triggers>
                                             <EventTrigger RoutedEvent="Loaded">
                                                 <BeginStoryboard>
                                                     <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                                        <DoubleAnimation Storyboard.TargetProperty="Height" From="8" To="15" Duration="0:0:0.45"/>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Height" From="6" To="16" Duration="0:0:0.45"/>
                                                     </Storyboard>
                                                 </BeginStoryboard>
                                             </EventTrigger>
                                         </Rectangle.Triggers>
                                     </Rectangle>
-                                    <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2,0">
+                                    <Rectangle Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2.5,0">
                                         <Rectangle.Triggers>
                                             <EventTrigger RoutedEvent="Loaded">
                                                 <BeginStoryboard>
                                                     <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="7" To="17" Duration="0:0:0.5"/>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="8" To="20" Duration="0:0:0.52"/>
                                                     </Storyboard>
                                                 </BeginStoryboard>
                                             </EventTrigger>
                                         </Rectangle.Triggers>
                                     </Rectangle>
-                                    <Rectangle Width="3" Height="11" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF">
+                                    <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF" Margin="0,0,2.5,0">
                                         <Rectangle.Triggers>
                                             <EventTrigger RoutedEvent="Loaded">
                                                 <BeginStoryboard>
                                                     <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="6" To="14" Duration="0:0:0.42"/>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="6" To="14" Duration="0:0:0.38"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Rectangle.Triggers>
+                                    </Rectangle>
+                                    <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF">
+                                        <Rectangle.Triggers>
+                                            <EventTrigger RoutedEvent="Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.2" From="9" To="18" Duration="0:0:0.46"/>
                                                     </Storyboard>
                                                 </BeginStoryboard>
                                             </EventTrigger>
@@ -186,18 +302,20 @@
                                     </Rectangle>
                                 </StackPanel>
 
-                                <Grid Grid.Column="1" x:Name="GifMinimalContainer" Visibility="Collapsed" Width="50" Height="50">
-                                    <Ellipse Width="50" Height="50" Fill="#1AFFFFFF"/>
-                                    <Image x:Name="GifMinimal" Width="42" Height="42" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
-                                        <Image.Clip>
-                                            <EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/>
-                                        </Image.Clip>
-                                    </Image>
+                                <!-- Optional Custom Decoration Container -->
+                                <Grid x:Name="GifMinimalContainer" Visibility="Collapsed" Width="46" Height="46" Margin="6,0,0,0">
+                                    <Border Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF">
+                                        <Image x:Name="GifMinimal" Width="42" Height="42" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                            <Image.Clip>
+                                                <RectangleGeometry Rect="0,0,42,42" RadiusX="10" RadiusY="10"/>
+                                            </Image.Clip>
+                                        </Image>
+                                    </Border>
                                     <MediaElement x:Name="DecorVideoMinimal" Width="42" Height="42" Stretch="UniformToFill"
                                                   LoadedBehavior="Manual" UnloadedBehavior="Manual" Volume="0"
                                                   Visibility="Collapsed" MediaEnded="DecorationVideo_MediaEnded">
                                         <MediaElement.Clip>
-                                            <EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/>
+                                            <RectangleGeometry Rect="0,0,42,42" RadiusX="10" RadiusY="10"/>
                                         </MediaElement.Clip>
                                     </MediaElement>
                                 </Grid>
@@ -205,10 +323,11 @@
                         </Grid>
                     </Grid>
 
+                    <!-- 3. Compact Mode: 335x70 Capsule -->
                     <Grid x:Name="CompactMode" Visibility="Collapsed">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
-                            <RowDefinition Height="6"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Grid Grid.Row="0" ClipToBounds="True">
@@ -217,102 +336,100 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
+                            <!-- Slide Layer: Old Track -->
                             <Grid x:Name="CompactContentOld" Grid.Column="0" Opacity="0">
                                 <Grid.RenderTransform><TranslateTransform x:Name="CompactOldTranslate"/></Grid.RenderTransform>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0" Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <Ellipse Width="54" Height="54" Fill="#1CFFFFFF"/>
+                                <Border Grid.Column="0" Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="0.8" Margin="10,0,0,0" VerticalAlignment="Center">
                                     <Image x:Name="AlbumArtOld" Width="46" Height="46" Stretch="UniformToFill">
-                                        <Image.Clip><EllipseGeometry Center="23,23" RadiusX="23" RadiusY="23"/></Image.Clip>
+                                        <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="12" RadiusY="12"/></Image.Clip>
                                     </Image>
-                                </Grid>
+                                </Border>
                                 <StackPanel x:Name="CompactTextOldContainer" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0">
                                     <Grid ClipToBounds="True">
-                                        <TextBlock x:Name="CompactTitleOld" Foreground="White" FontSize="12" FontWeight="SemiBold" TextTrimming="None" RenderTransformOrigin="0,0.5">
-                                            <TextBlock.RenderTransform>
-                                                <TranslateTransform x:Name="CompactTitleOldTranslate"/>
-                                            </TextBlock.RenderTransform>
+                                        <TextBlock x:Name="CompactTitleOld" Foreground="White" FontSize="12" FontWeight="SemiBold" TextTrimming="None">
+                                            <TextBlock.RenderTransform><TranslateTransform x:Name="CompactTitleOldTranslate"/></TextBlock.RenderTransform>
                                         </TextBlock>
                                     </Grid>
-                                    <TextBlock x:Name="CompactArtistOld" Foreground="#C4C4CC" FontSize="9.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock x:Name="CompactSourceTextOld" Text="Media" Foreground="#8C8C96" FontSize="8.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="CompactArtistOld" Foreground="#A0A0A8" FontSize="9.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="CompactSourceTextOld" Text="Media" Foreground="#7A7A84" FontSize="8.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </Grid>
 
+                            <!-- Slide Layer: New Track -->
                             <Grid x:Name="CompactContentNew" Grid.Column="0" Opacity="1">
                                 <Grid.RenderTransform><TranslateTransform x:Name="CompactNewTranslate"/></Grid.RenderTransform>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0" Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <Ellipse Width="54" Height="54" Fill="#1CFFFFFF"/>
-                                    <Image x:Name="AlbumArt" Width="46" Height="46" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
-                                        <Image.Clip><EllipseGeometry Center="23,23" RadiusX="23" RadiusY="23"/></Image.Clip>
+                                <Border Grid.Column="0" Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="0.8" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <Image x:Name="AlbumArt" Width="46" Height="46" Stretch="UniformToFill">
+                                        <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="12" RadiusY="12"/></Image.Clip>
                                         <Image.RenderTransform><RotateTransform x:Name="AlbumArtRotation" Angle="0"/></Image.RenderTransform>
                                     </Image>
-                                </Grid>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0">
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,8,0">
                                     <Grid ClipToBounds="True">
-                                        <TextBlock x:Name="CompactTitle" Text="Название" Foreground="White" FontSize="12" FontWeight="SemiBold" TextTrimming="None" RenderTransformOrigin="0,0.5">
-                                            <TextBlock.RenderTransform>
-                                                <TranslateTransform x:Name="CompactTitleTranslate"/>
-                                            </TextBlock.RenderTransform>
+                                        <TextBlock x:Name="CompactTitle" Text="Название трека" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="None">
+                                            <TextBlock.RenderTransform><TranslateTransform x:Name="CompactTitleTranslate"/></TextBlock.RenderTransform>
                                         </TextBlock>
                                     </Grid>
-                                    <TextBlock x:Name="CompactArtist" Text="Исполнитель" Foreground="#C4C4CC" FontSize="9.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
-                                    <Border x:Name="CompactSourceBadge" Margin="0,4,0,0" HorizontalAlignment="Left" CornerRadius="7" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="1" Padding="5,1">
+                                    <TextBlock x:Name="CompactArtist" Text="Исполнитель" Foreground="#A0A0A8" FontSize="9.5" Margin="0,1.5,0,0" TextTrimming="CharacterEllipsis" MaxWidth="160"/>
+                                    <Border x:Name="CompactSourceBadge" Margin="0,2,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="5" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="0.8" Padding="4.5,1">
                                         <StackPanel Orientation="Horizontal">
-                                            <Ellipse x:Name="CompactSourceDot" Width="4" Height="4" Fill="#21D760" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="CompactSourceText" Text="Media" Foreground="#D6D6DE" FontSize="8.5" FontWeight="SemiBold" MaxWidth="82" TextTrimming="CharacterEllipsis"/>
+                                            <Ellipse x:Name="CompactSourceDot" Width="3.5" Height="3.5" Fill="#21D760" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="CompactSourceText" Text="Media" Foreground="#D6D6DE" FontSize="8" FontWeight="SemiBold" MaxWidth="120" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>
                             </Grid>
 
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
-                                <StackPanel x:Name="PlaybackIndicatorCompact" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed">
-                                    <Rectangle Width="3" Height="9" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2,0">
-                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" From="7" To="14" Duration="0:0:0.45"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                            <!-- Right Controls: Equalizer Waveform & Decor -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <StackPanel x:Name="PlaybackIndicatorCompact" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0" Visibility="Collapsed">
+                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2.5,0">
+                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" From="6" To="16" Duration="0:0:0.45"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
                                     </Rectangle>
-                                    <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2,0">
-                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="6" To="16" Duration="0:0:0.5"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                    <Rectangle Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2.5,0">
+                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="8" To="20" Duration="0:0:0.52"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
                                     </Rectangle>
-                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF">
-                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="5" To="13" Duration="0:0:0.42"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                    <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF" Margin="0,0,2.5,0">
+                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="6" To="14" Duration="0:0:0.38"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                    </Rectangle>
+                                    <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF">
+                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.2" From="9" To="18" Duration="0:0:0.46"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
                                     </Rectangle>
                                 </StackPanel>
 
-                                <Grid x:Name="GifCompactContainer" Visibility="Collapsed" Width="50" Height="50">
-                                    <Ellipse Width="50" Height="50" Fill="#1AFFFFFF"/>
-                                    <Image x:Name="GifCompact" Width="42" Height="42" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
-                                        <Image.Clip><EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/></Image.Clip>
-                                    </Image>
-                                    <MediaElement x:Name="DecorVideoCompact" Width="42" Height="42" Stretch="UniformToFill"
+                                <Grid x:Name="GifCompactContainer" Visibility="Collapsed" Width="46" Height="46" Margin="4,0,0,0">
+                                    <Border Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF">
+                                        <Image x:Name="GifCompact" Width="40" Height="40" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                            <Image.Clip><RectangleGeometry Rect="0,0,40,40" RadiusX="10" RadiusY="10"/></Image.Clip>
+                                        </Image>
+                                    </Border>
+                                    <MediaElement x:Name="DecorVideoCompact" Width="40" Height="40" Stretch="UniformToFill"
                                                   LoadedBehavior="Manual" UnloadedBehavior="Manual" Volume="0"
                                                   Visibility="Collapsed" MediaEnded="DecorationVideo_MediaEnded">
-                                        <MediaElement.Clip><EllipseGeometry Center="21,21" RadiusX="21" RadiusY="21"/></MediaElement.Clip>
+                                        <MediaElement.Clip><RectangleGeometry Rect="0,0,40,40" RadiusX="10" RadiusY="10"/></MediaElement.Clip>
                                     </MediaElement>
                                 </Grid>
                             </StackPanel>
                         </Grid>
 
-                        <Grid Grid.Row="1" Margin="14,0,14,6" VerticalAlignment="Bottom">
-                            <Rectangle x:Name="ProgressTrackCompact" Height="1.5" Fill="#28FFFFFF" RadiusX="0.75" RadiusY="0.75" HorizontalAlignment="Stretch"/>
-                            <Rectangle x:Name="ProgressBarCompact" Height="1.5" Fill="#EAF6FF" RadiusX="0.75" RadiusY="0.75" HorizontalAlignment="Left" Width="0">
-                                <Rectangle.Effect>
-                                    <DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#CCF5FAFF" Opacity="0.65"/>
-                                </Rectangle.Effect>
-                            </Rectangle>
-                            <Ellipse x:Name="ProgressDotCompact" Width="4" Height="4" Fill="#F8FCFF" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0"/>
+                        <!-- Hidden Compact Progress Bar (Disabled) -->
+                        <Grid Grid.Row="1" Visibility="Collapsed">
+                            <Rectangle x:Name="ProgressTrackCompact" Height="0" Width="0"/>
+                            <Rectangle x:Name="ProgressBarCompact" Height="0" Width="0"/>
+                            <Ellipse x:Name="ProgressDotCompact" Width="0" Height="0"/>
                         </Grid>
                     </Grid>
 
-                    <Grid x:Name="ExpandedMode" Visibility="Collapsed" Margin="10,10,10,10">
-                        <Border CornerRadius="24" Background="#12000000" BorderBrush="#22FFFFFF" BorderThickness="1"/>
+                    <!-- 4. Expanded Mode: 500x176 Unified OLED Player -->
+                    <Grid x:Name="ExpandedMode" Visibility="Collapsed" Margin="16,14,16,12">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -320,134 +437,182 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <Grid Grid.Row="0" Margin="12,12,12,6" ClipToBounds="True">
+                            <!-- Top Section: Album Cover + Title + Waveform -->
+                            <Grid Grid.Row="0" Margin="0,0,0,12" ClipToBounds="True">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
+                                <!-- Slide Layer: Old Track -->
                                 <Grid x:Name="ExpandedContentOld" Grid.ColumnSpan="2" Opacity="0">
                                     <Grid.RenderTransform><TranslateTransform x:Name="ExpandedOldTranslate"/></Grid.RenderTransform>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="68" Height="68" CornerRadius="18" Background="#1EFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                    <Border Grid.Column="0" Width="60" Height="60" CornerRadius="14" Background="#1EFFFFFF" BorderBrush="#25FFFFFF" BorderThickness="1">
                                         <Image x:Name="AlbumArtExpandedOld" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="14" RadiusY="14"/></Image.Clip>
                                         </Image>
                                     </Border>
                                     <StackPanel x:Name="ExpandedTextOldContainer" Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
                                         <Grid ClipToBounds="True">
-                                            <TextBlock x:Name="TrackTitleOld" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="None" RenderTransformOrigin="0,0.5">
-                                                <TextBlock.RenderTransform>
-                                                    <TranslateTransform x:Name="TrackTitleOldTranslate"/>
-                                                </TextBlock.RenderTransform>
+                                            <TextBlock x:Name="TrackTitleOld" Foreground="White" FontSize="14" FontWeight="SemiBold" TextTrimming="None">
+                                                <TextBlock.RenderTransform><TranslateTransform x:Name="TrackTitleOldTranslate"/></TextBlock.RenderTransform>
                                             </TextBlock>
                                         </Grid>
-                                        <TextBlock x:Name="ArtistNameOld" Foreground="#B6B6BF" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock x:Name="ExpandedSourceTextOld" Text="Media" Foreground="#8C8C96" FontSize="9" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="ArtistNameOld" Foreground="#A0A0A8" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="ExpandedSourceTextOld" Text="Media" Foreground="#7A7A84" FontSize="9" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                 </Grid>
 
+                                <!-- Slide Layer: New Track -->
                                 <Grid x:Name="ExpandedContentNew" Grid.ColumnSpan="2" Opacity="1">
                                     <Grid.RenderTransform><TranslateTransform x:Name="ExpandedNewTranslate"/></Grid.RenderTransform>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="68" Height="68" CornerRadius="18" Background="#1EFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
-                                        <Image x:Name="AlbumArtExpanded" Width="60" Height="60" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Border Grid.Column="0" Width="60" Height="60" CornerRadius="14" Background="#1EFFFFFF" BorderBrush="#25FFFFFF" BorderThickness="1">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Color="#000000" Opacity="0.5"/>
+                                        </Border.Effect>
+                                        <Image x:Name="AlbumArtExpanded" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="14" RadiusY="14"/></Image.Clip>
                                             <Image.RenderTransform><RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/></Image.RenderTransform>
                                         </Image>
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
                                         <Grid ClipToBounds="True">
-                                            <TextBlock x:Name="TrackTitle" Text="Название трека" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="None" RenderTransformOrigin="0,0.5">
-                                                <TextBlock.RenderTransform>
-                                                    <TranslateTransform x:Name="TrackTitleTranslate"/>
-                                                </TextBlock.RenderTransform>
+                                            <TextBlock x:Name="TrackTitle" Text="Название трека" Foreground="White" FontSize="14" FontWeight="SemiBold" TextTrimming="None">
+                                                <TextBlock.RenderTransform><TranslateTransform x:Name="TrackTitleTranslate"/></TextBlock.RenderTransform>
                                             </TextBlock>
                                         </Grid>
-                                        <TextBlock x:Name="ArtistName" Text="Исполнитель" Foreground="#B6B6BF" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
-                                        <Border x:Name="ExpandedSourceBadge" Margin="0,6,0,0" HorizontalAlignment="Left" CornerRadius="8" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="1" Padding="6,1">
+                                        <TextBlock x:Name="ArtistName" Text="Исполнитель" Foreground="#A0A0A8" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <Border x:Name="ExpandedSourceBadge" Margin="0,5,0,0" HorizontalAlignment="Left" CornerRadius="7" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="0.8" Padding="6,1.5">
                                             <StackPanel Orientation="Horizontal">
                                                 <Ellipse x:Name="ExpandedSourceDot" Width="4" Height="4" Fill="#21D760" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                                                <TextBlock x:Name="ExpandedSourceText" Text="Media" Foreground="#D6D6DE" FontSize="9" FontWeight="SemiBold" MaxWidth="145" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock x:Name="ExpandedSourceText" Text="Media" Foreground="#D6D6DE" FontSize="9" FontWeight="SemiBold" MaxWidth="140" TextTrimming="CharacterEllipsis"/>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
                                 </Grid>
 
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="10,2,0,0">
+                                <!-- Top Right: Animated Waveform -->
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                                     <StackPanel x:Name="PlaybackIndicatorExpanded" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed">
-                                        <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" Margin="0,0,2,0">
-                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" From="7" To="15" Duration="0:0:0.45"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                        <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" Margin="0,0,2.5,0">
+                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" From="6" To="16" Duration="0:0:0.45"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
                                         </Rectangle>
-                                        <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#57C767" Margin="0,0,2,0">
-                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="6" To="17" Duration="0:0:0.5"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                        <Rectangle Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="#57C767" Margin="0,0,2.5,0">
+                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="8" To="20" Duration="0:0:0.52"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
                                         </Rectangle>
-                                        <Rectangle Width="3" Height="11" RadiusX="1.5" RadiusY="1.5" Fill="#7AF08A">
-                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="5" To="14" Duration="0:0:0.42"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                        <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#7AF08A" Margin="0,0,2.5,0">
+                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="5" To="14" Duration="0:0:0.38"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
+                                        </Rectangle>
+                                        <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F">
+                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.2" From="8" To="18" Duration="0:0:0.46"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
                                         </Rectangle>
                                     </StackPanel>
 
-                                    <Grid x:Name="GifExpandedContainer" Visibility="Collapsed" Width="42" Height="42">
-                                        <Ellipse Width="42" Height="42" Fill="#1AFFFFFF"/>
-                                        <Image x:Name="GifExpanded" Width="36" Height="36" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
-                                            <Image.Clip><EllipseGeometry Center="18,18" RadiusX="18" RadiusY="18"/></Image.Clip>
-                                        </Image>
-                                        <MediaElement x:Name="DecorVideoExpanded" Width="36" Height="36" Stretch="UniformToFill"
+                                    <Grid x:Name="GifExpandedContainer" Visibility="Collapsed" Width="36" Height="36">
+                                        <Border Width="36" Height="36" CornerRadius="9" Background="#1AFFFFFF">
+                                            <Image x:Name="GifExpanded" Width="32" Height="32" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                                <Image.Clip><RectangleGeometry Rect="0,0,32,32" RadiusX="8" RadiusY="8"/></Image.Clip>
+                                            </Image>
+                                        </Border>
+                                        <MediaElement x:Name="DecorVideoExpanded" Width="32" Height="32" Stretch="UniformToFill"
                                                       LoadedBehavior="Manual" UnloadedBehavior="Manual" Volume="0"
                                                       Visibility="Collapsed" MediaEnded="DecorationVideo_MediaEnded">
-                                            <MediaElement.Clip><EllipseGeometry Center="18,18" RadiusX="18" RadiusY="18"/></MediaElement.Clip>
+                                            <MediaElement.Clip><RectangleGeometry Rect="0,0,32,32" RadiusX="8" RadiusY="8"/></MediaElement.Clip>
                                         </MediaElement>
                                     </Grid>
                                 </StackPanel>
                             </Grid>
 
-                            <Grid Grid.Row="1" Margin="14,0,14,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
+                            <!-- Middle Section: Scrubber Progress Line & Time -->
+                            <Grid Grid.Row="1" Margin="2,0,2,12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
 
-                                <TextBlock x:Name="CurrentTimeText" Grid.Column="0" Text="0:00" Foreground="#A8A8B2" FontSize="9.5" VerticalAlignment="Center"/>
-                                <Grid Grid.Column="1" Margin="10,0">
-                                    <Rectangle x:Name="ProgressTrackExpanded" Height="2" Fill="#24FFFFFF" RadiusX="1" RadiusY="1" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
-                                    <Rectangle x:Name="ProgressBarExpanded" Height="2" Fill="#FFFFFF" RadiusX="1" RadiusY="1" HorizontalAlignment="Left" Width="0" VerticalAlignment="Center">
+                                <!-- Interactive Scrubber Bar -->
+                                <Grid Grid.Row="0" Margin="0,0,0,6" Height="10" VerticalAlignment="Center">
+                                    <Rectangle x:Name="ProgressTrackExpanded" Height="2.5" Fill="#20FFFFFF" RadiusX="1.25" RadiusY="1.25" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                    <Rectangle x:Name="ProgressBarExpanded" Height="2.5" Fill="#FFFFFF" RadiusX="1.25" RadiusY="1.25" HorizontalAlignment="Left" Width="0" VerticalAlignment="Center">
                                         <Rectangle.Effect>
-                                            <DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#80FFFFFF" Opacity="0.55"/>
+                                            <DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#FFFFFF" Opacity="0.55"/>
                                         </Rectangle.Effect>
                                     </Rectangle>
-                                    <Ellipse x:Name="ProgressDotExpanded" Width="5" Height="5" Fill="#FFFFFF" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0"/>
+                                    <Ellipse x:Name="ProgressDotExpanded" Width="6" Height="6" Fill="#FFFFFF" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0">
+                                        <Ellipse.Effect>
+                                            <DropShadowEffect BlurRadius="6" ShadowDepth="0" Color="#FFFFFF" Opacity="0.7"/>
+                                        </Ellipse.Effect>
+                                    </Ellipse>
                                 </Grid>
-                                <TextBlock x:Name="TotalTimeText" Grid.Column="2" Text="-0:00" Foreground="#A8A8B2" FontSize="9.5" VerticalAlignment="Center"/>
+
+                                <!-- Time Labels -->
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="CurrentTimeText" Grid.Column="0" Text="0:00" Foreground="#8E8E98" FontSize="9.5" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TotalTimeText" Grid.Column="2" Text="-0:00" Foreground="#8E8E98" FontSize="9.5" VerticalAlignment="Center"/>
+                                </Grid>
                             </Grid>
 
-                            <Grid Grid.Row="2" Margin="14,0,14,10">
+                            <!-- Bottom Section: Sleek Control Buttons with Vector SVG Paths -->
+                            <Grid Grid.Row="2" Margin="4,0,4,2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Button x:Name="FavoriteButton" Grid.Column="0" Content="☆" Width="26" Height="26" FontSize="14"
-                                        Background="Transparent" BorderThickness="0" Foreground="#C7C7D0" Opacity="0.72"/>
+                                <!-- Left Auxiliary: Info / Diagnostics -->
+                                <Button x:Name="FavoriteButton" Grid.Column="0" Width="30" Height="30"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand" Opacity="0.75"
+                                        ToolTip="Диагностика" Click="DiagnosticsButton_Click">
+                                    <Path Fill="#A8A8B2" Width="15" Height="15" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Data="M 12 2 C 6.48 2 2 6.48 2 12 C 2 17.52 6.48 22 12 22 C 17.52 22 22 17.52 22 12 C 22 6.48 17.52 2 12 2 Z M 13 17 L 11 17 L 11 11 L 13 11 Z M 13 9 L 11 9 L 11 7 L 13 7 Z"/>
+                                </Button>
 
-                                <StackPanel x:Name="ExpandedControlsRow" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Opacity="0.86">
-                                    <Button x:Name="PrevButton" Content="⏮" Style="{StaticResource ControlButtonStyle}" Click="PrevButton_Click" Margin="0,0,8,0"/>
-                                    <Button x:Name="PlayPauseButton" Content="⏸" Style="{StaticResource ControlButtonStyle}" Click="PlayPauseButton_Click" Width="34" Height="34" FontSize="13" Margin="0,0,8,0"/>
-                                    <Button x:Name="NextButton" Content="⏭" Style="{StaticResource ControlButtonStyle}" Click="NextButton_Click"/>
+                                <!-- Center Media Controls -->
+                                <StackPanel x:Name="ExpandedControlsRow" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <!-- Previous -->
+                                    <Button x:Name="PrevButton" Style="{StaticResource ModernMediaButtonStyle}" Click="PrevButton_Click" Margin="0,0,16,0" ToolTip="Предыдущий">
+                                        <Path Fill="White" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Data="M 2 3 C 2 2.4 2.4 2 3 2 C 3.6 2 4 2.4 4 3 L 4 7.6 L 13.3 2.3 C 14.1 1.8 15 2.4 15 3.3 L 15 14.7 C 15 15.6 14.1 16.2 13.3 15.7 L 4 10.4 L 4 15 C 4 15.6 3.6 16 3 16 C 2.4 16 2 15.6 2 15 Z"/>
+                                    </Button>
+
+                                    <!-- Play / Pause (Hero Button) -->
+                                    <Button x:Name="PlayPauseButton" Style="{StaticResource ModernPrimaryMediaButtonStyle}" Click="PlayPauseButton_Click" Margin="0,0,16,0" ToolTip="Воспроизведение / Пауза">
+                                        <Path x:Name="PlayPauseIcon" Fill="#0A0A0C" Width="14" Height="14" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Data="M 4 3 L 7 3 L 7 15 L 4 15 Z M 11 3 L 14 3 L 14 15 L 11 15 Z"/>
+                                    </Button>
+
+                                    <!-- Next -->
+                                    <Button x:Name="NextButton" Style="{StaticResource ModernMediaButtonStyle}" Click="NextButton_Click" ToolTip="Следующий">
+                                        <Path Fill="White" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Data="M 16 3 C 16 2.4 15.6 2 15 2 C 14.4 2 14 2.4 14 3 L 14 7.6 L 4.7 2.3 C 3.9 1.8 3 2.4 3 3.3 L 3 14.7 C 3 15.6 3.9 16.2 4.7 15.7 L 14 10.4 L 14 15 C 14 15.6 14.4 16 15 16 C 15.6 16 16 15.6 16 15 Z"/>
+                                    </Button>
                                 </StackPanel>
 
-                                <Button x:Name="OutputButton" Grid.Column="2" Content="◔" Width="26" Height="26" FontSize="12"
-                                        Background="Transparent" BorderThickness="0" Foreground="#C7C7D0" Opacity="0.72"/>
+                                <!-- Right Auxiliary: Settings -->
+                                <Button x:Name="OutputButton" Grid.Column="2" Width="30" Height="30"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand" Opacity="0.75"
+                                        ToolTip="Настройки" Click="SettingsButton_Click">
+                                    <Path Fill="#A8A8B2" Width="15" Height="15" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Data="M 19.14 12.94 C 19.18 12.63 19.2 12.32 19.2 12 C 19.2 11.68 19.18 11.37 19.14 11.06 L 21.46 9.25 C 21.67 9.08 21.73 8.78 21.6 8.54 L 19.4 4.73 C 19.27 4.49 18.98 4.4 18.73 4.49 L 16 5.59 C 15.44 5.16 14.83 4.8 14.17 4.53 L 13.75 1.72 C 13.71 1.45 13.48 1.25 13.2 1.25 L 8.8 1.25 C 8.52 1.25 8.29 1.45 8.25 1.72 L 7.83 4.53 C 7.17 4.8 6.56 5.16 6 5.59 L 3.27 4.49 C 3.02 4.4 2.73 4.49 2.6 4.73 L 0.4 8.54 C 0.27 8.78 0.33 9.08 0.54 9.25 L 2.86 11.06 C 2.82 11.37 2.8 11.68 2.8 12 C 2.8 12.32 2.82 12.63 2.86 12.94 L 0.54 14.75 C 0.33 14.92 0.27 15.22 0.4 15.46 L 2.6 19.27 C 2.73 19.51 3.02 19.6 3.27 19.51 L 6 18.41 C 6.56 18.84 7.17 19.2 7.83 19.47 L 8.25 22.28 C 8.29 22.55 8.52 22.75 8.8 22.75 L 13.2 22.75 C 13.48 22.75 13.71 22.55 13.75 22.28 L 14.17 19.47 C 14.83 19.2 15.44 18.84 16 18.41 L 18.73 19.51 C 18.98 19.6 19.27 19.51 19.4 19.27 L 21.6 15.46 C 21.73 15.22 21.67 14.92 21.46 14.75 Z M 11 15.5 C 9.07 15.5 7.5 13.93 7.5 12 C 7.5 10.07 9.07 8.5 11 8.5 C 12.93 8.5 14.5 10.07 14.5 12 C 14.5 13.93 12.93 15.5 11 15.5 Z"/>
+                                </Button>
                             </Grid>
                         </Grid>
+
                         <Grid.Triggers>
                             <EventTrigger RoutedEvent="MouseEnter">
                                 <BeginStoryboard>
@@ -461,9 +626,9 @@
                             <EventTrigger RoutedEvent="MouseLeave">
                                 <BeginStoryboard>
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="ExpandedControlsRow" Storyboard.TargetProperty="Opacity" To="0.86" Duration="0:0:0.18"/>
-                                        <DoubleAnimation Storyboard.TargetName="FavoriteButton" Storyboard.TargetProperty="Opacity" To="0.72" Duration="0:0:0.18"/>
-                                        <DoubleAnimation Storyboard.TargetName="OutputButton" Storyboard.TargetProperty="Opacity" To="0.72" Duration="0:0:0.18"/>
+                                        <DoubleAnimation Storyboard.TargetName="ExpandedControlsRow" Storyboard.TargetProperty="Opacity" To="0.9" Duration="0:0:0.18"/>
+                                        <DoubleAnimation Storyboard.TargetName="FavoriteButton" Storyboard.TargetProperty="Opacity" To="0.75" Duration="0:0:0.18"/>
+                                        <DoubleAnimation Storyboard.TargetName="OutputButton" Storyboard.TargetProperty="Opacity" To="0.75" Duration="0:0:0.18"/>
                                     </Storyboard>
                                 </BeginStoryboard>
                             </EventTrigger>

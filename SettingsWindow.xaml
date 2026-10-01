@@ -68,6 +68,11 @@
                     <StackPanel>
                         <TextBlock Text="Позиция" Style="{StaticResource SectionTitle}"/>
 
+                        <TextBlock Text="Монитор:" Foreground="White" FontSize="13" Margin="0,0,0,6"/>
+                        <ComboBox x:Name="MonitorComboBox" Height="32" Margin="0,0,0,14"
+                                  Background="#38383E" Foreground="White" BorderBrush="#555560"
+                                  SelectionChanged="MonitorComboBox_SelectionChanged"/>
+
                         <TextBlock Text="Центр по горизонтали (X):" Foreground="White" FontSize="13" Margin="0,0,0,6"/>
                         <Grid Margin="0,0,0,14">
                             <Grid.ColumnDefinitions>
@@ -210,6 +215,45 @@
                                   Margin="0,14,0,0"
                                   Checked="AdaptiveAlbumThemeChanged"
                                   Unchecked="AdaptiveAlbumThemeChanged"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="#2B2B31" BorderBrush="#5B4A78" BorderThickness="1.5" CornerRadius="16" Padding="16" Margin="0,0,0,14">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Экспериментальные функции" Style="{StaticResource SectionTitle}" Margin="0"/>
+                            <Border Grid.Column="1" Background="#8E44AD" CornerRadius="6" Padding="7,2">
+                                <TextBlock Text="BETA" Foreground="White" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </Grid>
+
+                        <CheckBox x:Name="LiquidGlassCheckBox"
+                                  Content="Стиль Liquid Glass (жидкое стекло)"
+                                  Foreground="White"
+                                  FontWeight="SemiBold"
+                                  FontSize="13"
+                                  Margin="0,4,0,8"
+                                  Checked="LiquidGlassChanged"
+                                  Unchecked="LiquidGlassChanged"/>
+
+                        <TextBlock Text="Превращает остров в оптическую линзу из жидкого стекла: кристальные световые фаски, рефлексы по верхней кромке, глубинная каустика обложки и эффект литого стекла."
+                                   Style="{StaticResource HintText}"/>
+
+                        <CheckBox x:Name="ExcludeFromCaptureCheckBox"
+                                  Content="Скрывать остров от захвата экрана"
+                                  Foreground="White"
+                                  FontWeight="SemiBold"
+                                  FontSize="13"
+                                  Margin="0,14,0,8"
+                                  Checked="ExcludeFromCaptureChanged"
+                                  Unchecked="ExcludeFromCaptureChanged"/>
+
+                        <TextBlock Text="Остров виден вам на мониторе, но автоматически исчезает на снимках экрана, в OBS, Discord и при записи видео."
+                                   Style="{StaticResource HintText}"/>
                     </StackPanel>
                 </Border>
 

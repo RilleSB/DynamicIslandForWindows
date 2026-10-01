@@ -21,6 +21,9 @@ namespace DynamicIslandPC
         public bool LockModeEnabled { get; set; } = false;
         public bool StartWithWindowsEnabled { get; set; } = false;
         public bool BrowserSourceEnabled { get; set; } = true;
+        public bool LiquidGlassEnabled { get; set; } = false;
+        public string TargetMonitorDeviceName { get; set; } = "";
+        public bool ExcludeFromCapture { get; set; } = false;
     }
 
     public static class SettingsService
