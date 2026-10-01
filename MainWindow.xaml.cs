@@ -425,6 +425,9 @@ namespace DynamicIslandPC
                     musicInfo.SourceApp = "Media";
             }
 
+            musicInfo.Title = musicInfo.Title?.Trim();
+            musicInfo.Artist = musicInfo.Artist?.Trim();
+
             var currentTrackId = $"{musicInfo.Artist}|{musicInfo.Title}";
             var prevTrackId = lastMusicInfo != null ? $"{lastMusicInfo.Artist}|{lastMusicInfo.Title}" : "";
             

@@ -348,14 +348,14 @@
                                         <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="12" RadiusY="12"/></Image.Clip>
                                     </Image>
                                 </Border>
-                                <StackPanel x:Name="CompactTextOldContainer" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0">
-                                    <Grid ClipToBounds="True">
-                                        <TextBlock x:Name="CompactTitleOld" Foreground="White" FontSize="12" FontWeight="SemiBold" TextTrimming="None">
+                                <StackPanel x:Name="CompactTextOldContainer" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,8,0">
+                                    <Grid ClipToBounds="True" HorizontalAlignment="Left">
+                                        <TextBlock x:Name="CompactTitleOld" HorizontalAlignment="Left" TextAlignment="Left" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="None">
                                             <TextBlock.RenderTransform><TranslateTransform x:Name="CompactTitleOldTranslate"/></TextBlock.RenderTransform>
                                         </TextBlock>
                                     </Grid>
-                                    <TextBlock x:Name="CompactArtistOld" Foreground="#A0A0A8" FontSize="9.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock x:Name="CompactSourceTextOld" Text="Media" Foreground="#7A7A84" FontSize="8.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="CompactArtistOld" HorizontalAlignment="Left" TextAlignment="Left" Foreground="#A0A0A8" FontSize="9.5" Margin="0,1.5,0,0" TextTrimming="CharacterEllipsis" MaxWidth="160"/>
+                                    <TextBlock x:Name="CompactSourceTextOld" Text="Media" HorizontalAlignment="Left" TextAlignment="Left" Foreground="#7A7A84" FontSize="8" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </Grid>
 
@@ -372,17 +372,17 @@
                                         <Image.RenderTransform><RotateTransform x:Name="AlbumArtRotation" Angle="0"/></Image.RenderTransform>
                                     </Image>
                                 </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,8,0">
-                                    <Grid ClipToBounds="True">
-                                        <TextBlock x:Name="CompactTitle" Text="Название трека" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="None">
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,8,0">
+                                    <Grid ClipToBounds="True" HorizontalAlignment="Left">
+                                        <TextBlock x:Name="CompactTitle" Text="Название трека" HorizontalAlignment="Left" TextAlignment="Left" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="None">
                                             <TextBlock.RenderTransform><TranslateTransform x:Name="CompactTitleTranslate"/></TextBlock.RenderTransform>
                                         </TextBlock>
                                     </Grid>
-                                    <TextBlock x:Name="CompactArtist" Text="Исполнитель" Foreground="#A0A0A8" FontSize="9.5" Margin="0,1.5,0,0" TextTrimming="CharacterEllipsis" MaxWidth="160"/>
+                                    <TextBlock x:Name="CompactArtist" Text="Исполнитель" HorizontalAlignment="Left" TextAlignment="Left" Foreground="#A0A0A8" FontSize="9.5" Margin="0,1.5,0,0" TextTrimming="CharacterEllipsis" MaxWidth="160"/>
                                     <Border x:Name="CompactSourceBadge" Margin="0,2,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="5" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="0.8" Padding="4.5,1">
-                                        <StackPanel Orientation="Horizontal">
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                                             <Ellipse x:Name="CompactSourceDot" Width="3.5" Height="3.5" Fill="#21D760" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="CompactSourceText" Text="Media" Foreground="#D6D6DE" FontSize="8" FontWeight="SemiBold" MaxWidth="120" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Name="CompactSourceText" Text="Media" HorizontalAlignment="Left" TextAlignment="Left" Foreground="#D6D6DE" FontSize="8" FontWeight="SemiBold" MaxWidth="120" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>
