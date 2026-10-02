@@ -65,6 +65,9 @@ namespace DynamicIslandPC
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetWindowDisplayAffinity(IntPtr hWnd, out uint pdwAffinity);
         
         private const int HOTKEY_ID = 9000;
         private const uint MOD_CONTROL = 0x0002;
@@ -211,6 +214,7 @@ namespace DynamicIslandPC
             var helper = new System.Windows.Interop.WindowInteropHelper(this);
             var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
             source.AddHook(HwndHook);
+            ApplyDisplayAffinity(excludeFromCapture);
             ApplyClickThroughMode();
         }
 

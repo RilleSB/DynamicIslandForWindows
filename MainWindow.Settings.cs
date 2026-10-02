@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Runtime.InteropServices;
 
 namespace DynamicIslandPC
 {
@@ -458,18 +459,47 @@ namespace DynamicIslandPC
             try
             {
                 var helper = new System.Windows.Interop.WindowInteropHelper(this);
-                if (helper.Handle == IntPtr.Zero) return;
+                IntPtr hwnd = helper.Handle;
+                if (hwnd == IntPtr.Zero)
+                {
+                    try
+                    {
+                        hwnd = helper.EnsureHandle();
+                    }
+                    catch { }
+                }
+
+                if (hwnd == IntPtr.Zero)
+                {
+                    Logger.Log($"ApplyDisplayAffinity deferred: Handle is IntPtr.Zero, waiting for Loaded event (exclude={exclude})");
+                    RoutedEventHandler onLoaded = null;
+                    onLoaded = (s, e) =>
+                    {
+                        Loaded -= onLoaded;
+                        ApplyDisplayAffinity(exclude);
+                    };
+                    Loaded += onLoaded;
+                    return;
+                }
 
                 const uint WDA_NONE = 0x00000000;
                 const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
                 const uint WDA_MONITOR = 0x00000001;
 
                 uint affinity = exclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
-                bool ok = SetWindowDisplayAffinity(helper.Handle, affinity);
+                bool ok = SetWindowDisplayAffinity(hwnd, affinity);
+                int err = Marshal.GetLastWin32Error();
+
                 if (!ok && exclude)
                 {
-                    SetWindowDisplayAffinity(helper.Handle, WDA_MONITOR);
+                    Logger.Error($"SetWindowDisplayAffinity(0x{affinity:X}) failed (err={err}), attempting fallback to WDA_MONITOR");
+                    bool fallbackOk = SetWindowDisplayAffinity(hwnd, WDA_MONITOR);
+                    int fallbackErr = Marshal.GetLastWin32Error();
+                    Logger.Log($"Fallback SetWindowDisplayAffinity(WDA_MONITOR) result: {fallbackOk}, err={fallbackErr}");
                 }
+
+                GetWindowDisplayAffinity(hwnd, out uint currentAffinity);
+                Logger.Log($"ApplyDisplayAffinity finished for hWnd=0x{hwnd:X}: requested=0x{affinity:X}, ok={ok}, err={err}, actualAffinity=0x{currentAffinity:X}");
             }
             catch (Exception ex)
             {
