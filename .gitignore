@@ -1,23 +1,62 @@
+## Build and output directories
 bin/
 obj/
+[Bb]in/
+[Oo]bj/
+publish/
+publish*/
+Publish*/
+Release-*/
+release-*/
+
+## Visual Studio & IDE files
 .vs/
 *.user
-Release-Build/
-Release-Final/
-.amazonq/
+*.userosscache
+*.suo
+*.userprefs
+*.pidb
+*.booproj
+*.svclog
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
 
-# Large binary files
+## AI & Assistant tools
+.amazonq/
+.gemini/
+
+## Archives and packages
+*.zip
+*.7z
+*.tar.gz
+*.rar
+*.nupkg
+*.snupkg
+
+## Executables and Debug symbols
 *.exe
+*.dll
 *.pdb
 *.apk
+*.aab
 
-# Publish directories
-publish/
-publish-small/
-Release-Single/
-Release-Single-NoRuntime/
+## OS and temporary scratch files
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+*.tmp
+*.log
+Text Document.txt
+diamond_block_fixed.toml
+фы.txt
+release-notes-*.md
+AGENTS.md
 
-# Android build outputs
+## Android build outputs (legacy)
 android/
 android-apk/
 android/app/build/
