@@ -32,6 +32,7 @@ namespace DynamicIslandPC
         private bool isTopPosition = true;
         private double customX = -1;
         private double customY = -1;
+        private bool hasCustomPosition = false;
         private bool isDarkTheme = true;
         private double scale = 1.0;
         private bool decorationEnabled = true;
@@ -338,19 +339,7 @@ namespace DynamicIslandPC
             double targetWidth = baseWidth * scale;
             double targetHeight = baseHeight * scale;
             
-            double targetLeft;
-            double targetTop;
-            
-            if (customX >= 0 && customY >= 0)
-            {
-                targetLeft = customX - targetWidth / 2;
-                targetTop = customY;
-            }
-            else
-            {
-                targetLeft = (SystemParameters.PrimaryScreenWidth - targetWidth) / 2;
-                targetTop = isTopPosition ? 20 : SystemParameters.PrimaryScreenHeight - targetHeight - 60;
-            }
+            var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
             
             var widthAnimation = new DoubleAnimation
             {

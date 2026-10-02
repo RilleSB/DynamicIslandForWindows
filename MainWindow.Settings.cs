@@ -23,6 +23,7 @@ namespace DynamicIslandPC
             scale = s.Scale;
             displayMode = Math.Clamp(s.DisplayMode, 0, 2);
             isTopPosition = s.IsTopPosition;
+            hasCustomPosition = s.HasCustomPosition || (s.CustomX >= 0 && s.CustomY >= 0);
             customX = s.CustomX;
             customY = s.CustomY;
             isDarkTheme = s.IsDarkTheme;
@@ -47,6 +48,7 @@ namespace DynamicIslandPC
             _settings.Scale = scale;
             _settings.DisplayMode = displayMode;
             _settings.IsTopPosition = isTopPosition;
+            _settings.HasCustomPosition = hasCustomPosition;
             _settings.CustomX = customX;
             _settings.CustomY = customY;
             _settings.IsDarkTheme = isDarkTheme;
@@ -220,9 +222,9 @@ namespace DynamicIslandPC
                 }
             }
 
-            if (customX >= 0 || customY >= 0)
+            if (hasCustomPosition)
             {
-                var point = new System.Drawing.Point((int)Math.Round(customX >= 0 ? customX : Left), (int)Math.Round(customY >= 0 ? customY : Top));
+                var point = new System.Drawing.Point((int)Math.Round(customX), (int)Math.Round(customY));
                 return Screen.FromPoint(point);
             }
 
@@ -243,7 +245,7 @@ namespace DynamicIslandPC
         private (double left, double top) CalculateWindowPosition(double targetWidth, double targetHeight)
         {
             var workingArea = GetTargetWorkingArea(customX, customY);
-            if (customX >= 0 && customY >= 0)
+            if (hasCustomPosition)
             {
                 var left = Math.Clamp(customX - targetWidth / 2, workingArea.Left, workingArea.Right - targetWidth);
                 var top = Math.Clamp(customY, workingArea.Top, workingArea.Bottom - targetHeight);
@@ -263,6 +265,7 @@ namespace DynamicIslandPC
         private void SetPosition(bool top)
         {
             isTopPosition = top;
+            hasCustomPosition = false;
             customX = -1;
             customY = -1;
             AnimateToMode();
@@ -281,8 +284,13 @@ namespace DynamicIslandPC
         {
             try
             {
-                var currentX = customX >= 0 ? customX : Left + Width / 2;
-                var currentY = customY >= 0 ? customY : Top;
+                var targetScreen = GetTargetScreen();
+                var currentX = hasCustomPosition
+                    ? customX
+                    : (targetScreen != null ? targetScreen.WorkingArea.Left + targetScreen.WorkingArea.Width / 2.0 : Left + Width / 2);
+                var currentY = hasCustomPosition
+                    ? customY
+                    : (targetScreen != null ? (isTopPosition ? targetScreen.WorkingArea.Top + 20 : targetScreen.WorkingArea.Bottom - Height - 60) : Top);
 
                 var settingsWindow = new SettingsWindow(
                     currentX,
@@ -290,6 +298,7 @@ namespace DynamicIslandPC
                     _settings,
                     (x, y) =>
                     {
+                        hasCustomPosition = true;
                         customX = x;
                         customY = y;
                         AnimateToMode();
@@ -614,9 +623,9 @@ namespace DynamicIslandPC
 
             if (trayIcon.ContextMenuStrip.Items[0] is ToolStripMenuItem positionMenu)
             {
-                ((ToolStripMenuItem)positionMenu.DropDownItems[0]).Checked = isTopPosition && customX < 0;
-                ((ToolStripMenuItem)positionMenu.DropDownItems[1]).Checked = !isTopPosition && customX < 0;
-                ((ToolStripMenuItem)positionMenu.DropDownItems[2]).Checked = customX >= 0 && customY >= 0;
+                ((ToolStripMenuItem)positionMenu.DropDownItems[0]).Checked = isTopPosition && !hasCustomPosition;
+                ((ToolStripMenuItem)positionMenu.DropDownItems[1]).Checked = !isTopPosition && !hasCustomPosition;
+                ((ToolStripMenuItem)positionMenu.DropDownItems[2]).Checked = hasCustomPosition;
             }
 
             if (trayIcon.ContextMenuStrip.Items[1] is ToolStripMenuItem themeMenu)

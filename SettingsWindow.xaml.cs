@@ -99,10 +99,7 @@ namespace DynamicIslandPC
             var workingArea = currentScreen.WorkingArea;
 
             isUpdating = true;
-            SliderX.Minimum = workingArea.Left;
-            SliderX.Maximum = workingArea.Right;
-            SliderY.Minimum = workingArea.Top;
-            SliderY.Maximum = workingArea.Bottom;
+            UpdateSlidersForScreen(currentScreen);
 
             PositionX = currentX;
             PositionY = currentY;
@@ -172,24 +169,69 @@ namespace DynamicIslandPC
             }
         }
 
+        private void UpdateSlidersForScreen(Forms.Screen screen)
+        {
+            var workingArea = screen.WorkingArea;
+            if (SliderX.Minimum > workingArea.Left)
+            {
+                SliderX.Minimum = workingArea.Left;
+                SliderX.Maximum = workingArea.Right;
+            }
+            else
+            {
+                SliderX.Maximum = workingArea.Right;
+                SliderX.Minimum = workingArea.Left;
+            }
+
+            if (SliderY.Minimum > workingArea.Top)
+            {
+                SliderY.Minimum = workingArea.Top;
+                SliderY.Maximum = workingArea.Bottom;
+            }
+            else
+            {
+                SliderY.Maximum = workingArea.Bottom;
+                SliderY.Minimum = workingArea.Top;
+            }
+        }
+
         private void CenterButton_Click(object sender, RoutedEventArgs e)
         {
             var workingArea = currentScreen.WorkingArea;
-            SliderX.Value = workingArea.Left + (workingArea.Width / 2.0);
+            isUpdating = true;
+            PositionX = workingArea.Left + (workingArea.Width / 2.0);
+            SliderX.Value = PositionX;
+            TextX.Text = ((int)PositionX).ToString();
+            isUpdating = false;
+            onPositionChanged?.Invoke(PositionX, PositionY);
         }
 
         private void TopButton_Click(object sender, RoutedEventArgs e)
         {
             var workingArea = currentScreen.WorkingArea;
-            SliderX.Value = workingArea.Left + (workingArea.Width / 2.0);
-            SliderY.Value = workingArea.Top + 20;
+            isUpdating = true;
+            PositionX = workingArea.Left + (workingArea.Width / 2.0);
+            PositionY = workingArea.Top + 20;
+            SliderX.Value = PositionX;
+            SliderY.Value = PositionY;
+            TextX.Text = ((int)PositionX).ToString();
+            TextY.Text = ((int)PositionY).ToString();
+            isUpdating = false;
+            onPositionChanged?.Invoke(PositionX, PositionY);
         }
 
         private void BottomButton_Click(object sender, RoutedEventArgs e)
         {
             var workingArea = currentScreen.WorkingArea;
-            SliderX.Value = workingArea.Left + (workingArea.Width / 2.0);
-            SliderY.Value = workingArea.Bottom - 120;
+            isUpdating = true;
+            PositionX = workingArea.Left + (workingArea.Width / 2.0);
+            PositionY = workingArea.Bottom - 120;
+            SliderX.Value = PositionX;
+            SliderY.Value = PositionY;
+            TextX.Text = ((int)PositionX).ToString();
+            TextY.Text = ((int)PositionY).ToString();
+            isUpdating = false;
+            onPositionChanged?.Invoke(PositionX, PositionY);
         }
 
         private void DarkThemeButton_Click(object sender, RoutedEventArgs e)
@@ -463,10 +505,7 @@ namespace DynamicIslandPC
 
             var workingArea = currentScreen.WorkingArea;
             isUpdating = true;
-            SliderX.Minimum = workingArea.Left;
-            SliderX.Maximum = workingArea.Right;
-            SliderY.Minimum = workingArea.Top;
-            SliderY.Maximum = workingArea.Bottom;
+            UpdateSlidersForScreen(currentScreen);
 
             // Центрируем остров на выбранном мониторе
             PositionX = workingArea.Left + workingArea.Width / 2.0;

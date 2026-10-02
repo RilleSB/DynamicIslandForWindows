@@ -6,6 +6,7 @@ namespace DynamicIslandPC
 {
     public class AppSettings
     {
+        public bool HasCustomPosition { get; set; } = false;
         public double CustomX { get; set; } = -1;
         public double CustomY { get; set; } = -1;
         public bool IsTopPosition { get; set; } = true;
