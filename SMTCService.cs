@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Text;
@@ -14,8 +15,16 @@ namespace DynamicIslandPC
         private MusicInfo lastKnownInfo = null;
         private GlobalSystemMediaTransportControlsSessionManager sessionManager = null;
         private GlobalSystemMediaTransportControlsSession currentSession = null;
+        private string currentSubscribedSourceApp = null;
         private bool initialized = false;
         private string lastDiagnostics = "SMTC is not initialized yet.";
+        private string lastLoggedSanitizedKey = "";
+
+        private readonly object stateLock = new();
+        private CancellationTokenSource debounceCts;
+        private CancellationTokenSource activeFetchCts;
+        private bool isFetching = false;
+        private bool needsRefetch = false;
 
         public bool BrowserSourceEnabled { get; set; } = true;
 
@@ -25,7 +34,7 @@ namespace DynamicIslandPC
         {
             if (initialized) return;
             initialized = true;
-            
+
             Task.Run(async () =>
             {
                 try
@@ -33,7 +42,7 @@ namespace DynamicIslandPC
                     sessionManager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
                     sessionManager.CurrentSessionChanged += OnSessionChanged;
                     sessionManager.SessionsChanged += OnSessionsChanged;
-                    await FetchAndNotify();
+                    TriggerFetch(0);
                 }
                 catch (Exception ex)
                 {
@@ -44,136 +53,261 @@ namespace DynamicIslandPC
 
         private void OnSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender, CurrentSessionChangedEventArgs args)
         {
-            Task.Run(FetchAndNotify);
+            TriggerFetch(50);
         }
 
         private void OnSessionsChanged(GlobalSystemMediaTransportControlsSessionManager sender, SessionsChangedEventArgs args)
         {
-            Task.Run(FetchAndNotify);
-        }
-
-        private void SubscribeToSession(GlobalSystemMediaTransportControlsSession session)
-        {
-            if (currentSession != null)
-            {
-                currentSession.MediaPropertiesChanged -= OnMediaPropertiesChanged;
-                currentSession.PlaybackInfoChanged -= OnPlaybackInfoChanged;
-            }
-            
-            currentSession = session;
-            
-            if (currentSession != null)
-            {
-                currentSession.MediaPropertiesChanged += OnMediaPropertiesChanged;
-                currentSession.PlaybackInfoChanged += OnPlaybackInfoChanged;
-            }
+            TriggerFetch(50);
         }
 
         private void OnMediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args)
         {
-            Task.Run(FetchAndNotify);
+            TriggerFetch(40);
         }
 
         private void OnPlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
         {
-            Task.Run(FetchAndNotify);
+            TriggerFetch(40);
         }
 
-        private async Task FetchAndNotify()
+        public void TriggerFetch(int debounceMs = 50)
         {
-            var info = await FetchCurrentInfo();
-            if (info != null)
+            lock (stateLock)
             {
-                lastKnownInfo = info;
-                MusicInfoChanged?.Invoke(info);
+                needsRefetch = true;
+                debounceCts?.Cancel();
+                debounceCts?.Dispose();
+                debounceCts = new CancellationTokenSource();
+                var token = debounceCts.Token;
+
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (debounceMs > 0)
+                            await Task.Delay(debounceMs, token);
+
+                        if (token.IsCancellationRequested)
+                            return;
+
+                        await ProcessFetchQueueAsync();
+                    }
+                    catch (OperationCanceledException) { }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Error during debounced fetch trigger", ex);
+                    }
+                }, token);
             }
         }
 
-        private async Task<MusicInfo> FetchCurrentInfo()
+        private async Task ProcessFetchQueueAsync()
         {
-            try
+            while (true)
             {
-                var session = await SelectBestSessionAsync();
-                if (session == null)
-                    return new MusicInfo
+                CancellationToken ct;
+                lock (stateLock)
+                {
+                    if (!needsRefetch)
+                        return;
+
+                    if (isFetching)
+                        return;
+
+                    isFetching = true;
+                    needsRefetch = false;
+
+                    activeFetchCts?.Cancel();
+                    activeFetchCts?.Dispose();
+                    activeFetchCts = new CancellationTokenSource();
+                    ct = activeFetchCts.Token;
+                }
+
+                try
+                {
+                    await FetchAndNotifyAsync(ct);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    Logger.Error("Error during SMTC FetchAndNotifyAsync", ex);
+                }
+                finally
+                {
+                    lock (stateLock)
                     {
-                        SourceApp = "Media",
-                        HasMedia = false,
-                        IsPlaying = false,
-                        Position = TimeSpan.Zero,
-                        Duration = TimeSpan.Zero
-                    };
+                        isFetching = false;
+                    }
+                }
+            }
+        }
 
-                SubscribeToSession(session);
-                var props = await session.TryGetMediaPropertiesAsync();
-                if (props == null || string.IsNullOrWhiteSpace(props.Title))
-                    return new MusicInfo
-                    {
-                        SourceApp = MusicVisualHelper.NormalizeSource(session.SourceAppUserModelId),
-                        HasMedia = false,
-                        IsPlaying = false,
-                        Position = TimeSpan.Zero,
-                        Duration = TimeSpan.Zero
-                    };
+        private void SubscribeToSession(GlobalSystemMediaTransportControlsSession session)
+        {
+            var newSource = session?.SourceAppUserModelId;
+            if (string.Equals(currentSubscribedSourceApp, newSource, StringComparison.Ordinal) && currentSession != null)
+            {
+                return;
+            }
 
-                var timeline = session.GetTimelineProperties();
-                var rawTitle = props.Title;
-                var rawArtist = props.Artist;
-                var rawSource = session.SourceAppUserModelId;
+            UnsubscribeCurrentSession();
 
-                var normalizedSource = MusicVisualHelper.NormalizeSource(rawSource);
-                var normalizedMetadata = MusicVisualHelper.NormalizeBrowserMetadata(rawTitle, rawArtist, normalizedSource);
-                var sanitizedTitle = normalizedMetadata.Title;
-                var sanitizedArtist = normalizedMetadata.Artist;
+            currentSession = session;
+            currentSubscribedSourceApp = newSource;
 
+            if (currentSession != null)
+            {
+                try
+                {
+                    currentSession.MediaPropertiesChanged += OnMediaPropertiesChanged;
+                    currentSession.PlaybackInfoChanged += OnPlaybackInfoChanged;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Failed to subscribe to SMTC session events", ex);
+                }
+            }
+        }
+
+        private void UnsubscribeCurrentSession()
+        {
+            if (currentSession != null)
+            {
+                try
+                {
+                    currentSession.MediaPropertiesChanged -= OnMediaPropertiesChanged;
+                    currentSession.PlaybackInfoChanged -= OnPlaybackInfoChanged;
+                }
+                catch { }
+                currentSession = null;
+            }
+            currentSubscribedSourceApp = null;
+        }
+
+        private async Task FetchAndNotifyAsync(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            var (session, props) = await SelectBestSessionAsync(ct);
+            ct.ThrowIfCancellationRequested();
+
+            if (session == null)
+            {
+                UnsubscribeCurrentSession();
+                var emptyInfo = new MusicInfo
+                {
+                    SourceApp = "Media",
+                    HasMedia = false,
+                    IsPlaying = false,
+                    Position = TimeSpan.Zero,
+                    Duration = TimeSpan.Zero
+                };
+                lastKnownInfo = emptyInfo;
+                MusicInfoChanged?.Invoke(emptyInfo);
+                return;
+            }
+
+            SubscribeToSession(session);
+
+            if (props == null || string.IsNullOrWhiteSpace(props.Title))
+            {
+                var noTrackInfo = new MusicInfo
+                {
+                    SourceApp = MusicVisualHelper.NormalizeSource(session.SourceAppUserModelId),
+                    HasMedia = false,
+                    IsPlaying = false,
+                    Position = TimeSpan.Zero,
+                    Duration = TimeSpan.Zero
+                };
+                lastKnownInfo = noTrackInfo;
+                MusicInfoChanged?.Invoke(noTrackInfo);
+                return;
+            }
+
+            GlobalSystemMediaTransportControlsSessionTimelineProperties timeline = null;
+            try { timeline = session.GetTimelineProperties(); } catch { }
+
+            var rawTitle = props.Title;
+            var rawArtist = props.Artist;
+            var rawSource = session.SourceAppUserModelId;
+
+            var normalizedSource = MusicVisualHelper.NormalizeSource(rawSource);
+            var normalizedMetadata = MusicVisualHelper.NormalizeBrowserMetadata(rawTitle, rawArtist, normalizedSource);
+            var sanitizedTitle = normalizedMetadata.Title;
+            var sanitizedArtist = normalizedMetadata.Artist;
+
+            var sanitizedKey = $"{rawTitle}|{rawArtist}|{rawSource}";
+            if (!string.Equals(lastLoggedSanitizedKey, sanitizedKey, StringComparison.Ordinal))
+            {
+                lastLoggedSanitizedKey = sanitizedKey;
                 if (!string.Equals(rawArtist, sanitizedArtist, StringComparison.Ordinal) ||
                     !string.Equals(rawSource, normalizedSource, StringComparison.Ordinal) ||
                     !string.Equals(rawTitle, sanitizedTitle, StringComparison.Ordinal))
                 {
                     Logger.Log($"Sanitized browser/media metadata: title='{rawTitle}' -> '{sanitizedTitle}', artist='{rawArtist}' -> '{sanitizedArtist}', source='{rawSource}' -> '{normalizedSource}'");
                 }
+            }
 
-                var info = new MusicInfo
+            var info = new MusicInfo
+            {
+                Title = sanitizedTitle,
+                Artist = sanitizedArtist,
+                SourceApp = normalizedSource,
+                RawTitle = rawTitle,
+                RawArtist = rawArtist,
+                RawSourceApp = rawSource,
+                SessionScore = ScoreSession(session, sanitizedTitle, sanitizedArtist, props.Thumbnail != null, BrowserSourceEnabled),
+                IsPlaying = IsPlaying(session),
+                HasMedia = true,
+                Position = timeline?.Position ?? TimeSpan.Zero,
+                Duration = timeline?.EndTime ?? TimeSpan.Zero
+            };
+
+            if (props.Thumbnail != null)
+            {
+                if (lastKnownInfo?.AlbumArt != null &&
+                    string.Equals(lastKnownInfo.RawTitle, rawTitle, StringComparison.Ordinal) &&
+                    string.Equals(lastKnownInfo.RawArtist, rawArtist, StringComparison.Ordinal) &&
+                    string.Equals(lastKnownInfo.SourceApp, normalizedSource, StringComparison.Ordinal))
                 {
-                    Title = sanitizedTitle,
-                    Artist = sanitizedArtist,
-                    SourceApp = normalizedSource,
-                    RawTitle = rawTitle,
-                    RawArtist = rawArtist,
-                    RawSourceApp = rawSource,
-                    SessionScore = ScoreSession(session, sanitizedTitle, sanitizedArtist, props.Thumbnail != null, BrowserSourceEnabled),
-                    IsPlaying = session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
-                    HasMedia = true,
-                    Position = timeline?.Position ?? TimeSpan.Zero,
-                    Duration = timeline?.EndTime ?? TimeSpan.Zero
-                };
-
-                if (props.Thumbnail != null)
+                    info.AlbumArt = lastKnownInfo.AlbumArt;
+                }
+                else
                 {
                     try
                     {
-                        var stream = await props.Thumbnail.OpenReadAsync();
-                        var image = new BitmapImage();
-                        image.BeginInit();
-                        image.CacheOption = BitmapCacheOption.OnLoad;
-                        image.StreamSource = stream.AsStreamForRead();
-                        image.EndInit();
-                        image.Freeze();
-                        info.AlbumArt = image;
+                        using var winrtStream = await props.Thumbnail.OpenReadAsync();
+                        ct.ThrowIfCancellationRequested();
+                        if (winrtStream != null && winrtStream.Size > 0)
+                        {
+                            using var netStream = winrtStream.AsStreamForRead();
+                            using var memStream = new MemoryStream();
+                            await netStream.CopyToAsync(memStream, ct);
+                            memStream.Position = 0;
+
+                            var image = new BitmapImage();
+                            image.BeginInit();
+                            image.CacheOption = BitmapCacheOption.OnLoad;
+                            image.StreamSource = memStream;
+                            image.EndInit();
+                            image.Freeze();
+                            info.AlbumArt = image;
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
                     }
                     catch (Exception ex)
                     {
                         Logger.Error("Failed to load album art thumbnail", ex);
                     }
                 }
+            }
 
-                return info;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Failed to fetch current SMTC info", ex);
-            }
-            return lastKnownInfo;
+            ct.ThrowIfCancellationRequested();
+            lastKnownInfo = info;
+            MusicInfoChanged?.Invoke(info);
         }
 
         public MusicInfo GetLastKnownInfo() => lastKnownInfo;
@@ -201,22 +335,24 @@ namespace DynamicIslandPC
             return sb.ToString();
         }
 
-        private async Task<GlobalSystemMediaTransportControlsSession> SelectBestSessionAsync()
+        private async Task<(GlobalSystemMediaTransportControlsSession session, GlobalSystemMediaTransportControlsSessionMediaProperties props)> SelectBestSessionAsync(CancellationToken ct)
         {
             var sessions = sessionManager?.GetSessions();
             if (sessions == null || sessions.Count == 0)
             {
                 lastDiagnostics = "No SMTC sessions available.";
-                return null;
+                return (null, null);
             }
 
             GlobalSystemMediaTransportControlsSession bestSession = null;
+            GlobalSystemMediaTransportControlsSessionMediaProperties bestProps = null;
             int bestScore = int.MinValue;
             var diagnostics = new StringBuilder();
             diagnostics.AppendLine("Available SMTC sessions:");
 
             foreach (var session in sessions)
             {
+                ct.ThrowIfCancellationRequested();
                 try
                 {
                     var props = await session.TryGetMediaPropertiesAsync();
@@ -237,7 +373,12 @@ namespace DynamicIslandPC
                     {
                         bestScore = score;
                         bestSession = session;
+                        bestProps = props;
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -246,7 +387,7 @@ namespace DynamicIslandPC
             }
 
             lastDiagnostics = diagnostics.ToString();
-            return bestSession;
+            return (bestSession, bestProps);
         }
 
         private static int ScoreSession(GlobalSystemMediaTransportControlsSession session, string title, string artist, bool hasThumbnail, bool browserSourceEnabled)
@@ -275,7 +416,14 @@ namespace DynamicIslandPC
 
         private static bool IsPlaying(GlobalSystemMediaTransportControlsSession session)
         {
-            return session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+            try
+            {
+                return session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

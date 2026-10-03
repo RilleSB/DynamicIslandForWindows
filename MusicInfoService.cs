@@ -33,6 +33,8 @@ namespace DynamicIslandPC
         private const uint KEYEVENTF_KEYUP = 0x0002;
 
         private SMTCService smtcService;
+        private static readonly Lazy<BitmapImage> DefaultAlbumArtLazy = new(CreateDefaultAlbumArt);
+        public static BitmapImage DefaultAlbumArt => DefaultAlbumArtLazy.Value;
 
         public event Action<MusicInfo> MusicInfoChanged;
         
@@ -42,7 +44,7 @@ namespace DynamicIslandPC
             smtcService.MusicInfoChanged += info =>
             {
                 if (info.AlbumArt == null)
-                    info.AlbumArt = CreateDefaultAlbumArt();
+                    info.AlbumArt = DefaultAlbumArt;
                 MusicInfoChanged?.Invoke(info);
             };
             smtcService.Initialize();
@@ -65,7 +67,7 @@ namespace DynamicIslandPC
             }
             
             if (info.AlbumArt == null)
-                info.AlbumArt = CreateDefaultAlbumArt();
+                info.AlbumArt = DefaultAlbumArt;
             
             return info;
         }
@@ -80,14 +82,11 @@ namespace DynamicIslandPC
             smtcService.BrowserSourceEnabled = enabled;
         }
 
-
-
-        private BitmapImage CreateDefaultAlbumArt()
+        private static BitmapImage CreateDefaultAlbumArt()
         {
             try
             {
-                // Создаем простую дефолтную обложку
-                var bitmap = new Bitmap(100, 100);
+                using var bitmap = new Bitmap(100, 100);
                 using (var g = Graphics.FromImage(bitmap))
                 {
                     g.FillRectangle(Brushes.DarkGray, 0, 0, 100, 100);
@@ -96,16 +95,14 @@ namespace DynamicIslandPC
                 }
                 
                 var bitmapImage = new BitmapImage();
-                using (var memory = new MemoryStream())
-                {
-                    bitmap.Save(memory, System.Drawing.Imaging.ImageFormat.Png);
-                    memory.Position = 0;
-                    bitmapImage.BeginInit();
-                    bitmapImage.StreamSource = memory;
-                    bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmapImage.EndInit();
-                    bitmapImage.Freeze();
-                }
+                using var memory = new MemoryStream();
+                bitmap.Save(memory, System.Drawing.Imaging.ImageFormat.Png);
+                memory.Position = 0;
+                bitmapImage.BeginInit();
+                bitmapImage.StreamSource = memory;
+                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                bitmapImage.EndInit();
+                bitmapImage.Freeze();
                 
                 return bitmapImage;
             }

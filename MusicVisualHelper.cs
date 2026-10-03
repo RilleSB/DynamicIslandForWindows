@@ -48,6 +48,7 @@ namespace DynamicIslandPC
                 var scaled = new TransformedBitmap(bitmapSource, new ScaleTransform(
                     Math.Min(1.0, 32.0 / bitmapSource.PixelWidth),
                     Math.Min(1.0, 32.0 / bitmapSource.PixelHeight)));
+                scaled.Freeze();
 
                 int stride = scaled.PixelWidth * 4;
                 var pixels = new byte[scaled.PixelHeight * stride];
@@ -125,14 +126,20 @@ namespace DynamicIslandPC
                 return DefaultPalette;
 
             var key = $"{NormalizeWhitespace(cacheHint)}|{bitmapSource.PixelWidth}x{bitmapSource.PixelHeight}";
-            if (PaletteCache.TryGetValue(key, out var cached))
-                return cached;
+            lock (PaletteCache)
+            {
+                if (PaletteCache.TryGetValue(key, out var cached))
+                    return cached;
+            }
 
             var palette = GetAlbumPalette(bitmapSource);
-            if (PaletteCache.Count >= PaletteCacheLimit)
-                PaletteCache.Remove(PaletteCache.Keys.First());
+            lock (PaletteCache)
+            {
+                if (PaletteCache.Count >= PaletteCacheLimit)
+                    PaletteCache.Remove(PaletteCache.Keys.First());
 
-            PaletteCache[key] = palette;
+                PaletteCache[key] = palette;
+            }
             return palette;
         }
 

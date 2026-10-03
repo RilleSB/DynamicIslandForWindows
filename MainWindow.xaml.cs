@@ -162,11 +162,24 @@ namespace DynamicIslandPC
             InitializeTopmostWatchdog();
         }
 
+        private MusicInfo _pendingMusicInfo = null;
+
         private void InitializeMusicService()
         {
             musicService = new MusicInfoService();
             musicService.SetBrowserSourceEnabled(browserSourceEnabled);
-            musicService.MusicInfoChanged += info => Dispatcher.Invoke(() => ApplyMusicInfo(info));
+            musicService.MusicInfoChanged += info =>
+            {
+                _pendingMusicInfo = info;
+                Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+                {
+                    var latest = _pendingMusicInfo;
+                    if (latest != null)
+                    {
+                        ApplyMusicInfo(latest);
+                    }
+                }));
+            };
             ApplyMusicInfo(musicService.GetCurrentMusicInfo());
             InitializeProgressTimer();
         }
@@ -1140,13 +1153,15 @@ namespace DynamicIslandPC
         private static void ResetSlideLayerState(Grid oldLayer, Grid newLayer, TranslateTransform oldTransform, TranslateTransform newTransform)
         {
             StopSlideAnimations(oldTransform, newTransform);
+            oldLayer.BeginAnimation(OpacityProperty, null);
+            newLayer.BeginAnimation(OpacityProperty, null);
             oldTransform.X = 0;
             newTransform.X = 0;
             oldLayer.Opacity = 0;
             newLayer.Opacity = 1;
         }
         
-                private void SlideContent(MusicInfo info)
+        private void SlideContent(MusicInfo info)
         {
             var enterDur = TimeSpan.FromMilliseconds(460);
             var exitDur = TimeSpan.FromMilliseconds(340);
@@ -1201,6 +1216,8 @@ namespace DynamicIslandPC
                 enterAnim.Completed += (_, __) =>
                 {
                     ResetSlideLayerState(oldLayer, newLayer, oldTransform, newTransform);
+                    AlbumArtOld.Source = null;
+                    AlbumArtExpandedOld.Source = null;
                     _slideDirection = -1;
                 };
 

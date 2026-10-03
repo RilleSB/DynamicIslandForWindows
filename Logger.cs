@@ -31,6 +31,14 @@ namespace DynamicIslandPC
                 var logMessage = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}";
                 lock (SyncRoot)
                 {
+                    var fileInfo = new FileInfo(LogPath);
+                    if (fileInfo.Exists && fileInfo.Length > 5 * 1024 * 1024)
+                    {
+                        var backupPath = LogPath + ".old";
+                        if (File.Exists(backupPath))
+                            File.Delete(backupPath);
+                        File.Move(LogPath, backupPath);
+                    }
                     File.AppendAllText(LogPath, logMessage + Environment.NewLine, Encoding.UTF8);
                 }
             }
