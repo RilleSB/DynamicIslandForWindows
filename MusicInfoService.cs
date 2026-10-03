@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 
 namespace DynamicIslandPC
@@ -126,6 +127,16 @@ namespace DynamicIslandPC
         public void PreviousTrack()
         {
             SendMediaKey(VK_MEDIA_PREV_TRACK);
+        }
+
+        public Task<bool> SeekToRatioAsync(double ratio)
+        {
+            return smtcService.SeekToRatioAsync(ratio);
+        }
+
+        public Task<bool> SeekToPositionAsync(TimeSpan position)
+        {
+            return smtcService.SeekToPositionAsync(position);
         }
 
         private void SendMediaKey(byte key)

@@ -46,11 +46,15 @@ namespace DynamicIslandPC
         private System.Windows.Forms.ToolStripMenuItem trayPlayPauseItem;
         private AppSettings _settings;
         private DispatcherTimer _progressTimer;
-        private DispatcherTimer _smartHideTimer;
         private DispatcherTimer _topmostWatchdogTimer;
         private bool _isSmartHidden;
-        private const int SmartHideDelayMs = 3500;
-        private const int ForcedSmartShowMs = 8000;
+        private AudioVisualizerService _audioVisualizer;
+        private volatile bool _visualizerUpdatePending = false;
+        private volatile bool _musicInfoUpdatePending = false;
+        private bool _isScrubbing = false;
+        private Grid _activeScrubberContainer = null;
+        private Point _dragStartPoint;
+        private bool _isDraggingReady = false;
         
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -123,14 +127,9 @@ namespace DynamicIslandPC
             
             MouseWheel += OnMouseWheel;
             MouseDown += OnMouseDown;
-            
-            MouseLeftButtonUp += (s, e) => {
-                if (e.ChangedButton == MouseButton.Left)
-                {
-                    CycleDisplayMode();
-                    e.Handled = true;
-                }
-            };
+            PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
+            PreviewMouseMove += OnPreviewMouseMove;
+            PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
             
             // Контекстное меню
             var contextMenu = new System.Windows.Controls.ContextMenu();
@@ -171,8 +170,11 @@ namespace DynamicIslandPC
             musicService.MusicInfoChanged += info =>
             {
                 _pendingMusicInfo = info;
+                if (_musicInfoUpdatePending) return;
+                _musicInfoUpdatePending = true;
                 Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
                 {
+                    _musicInfoUpdatePending = false;
                     var latest = _pendingMusicInfo;
                     if (latest != null)
                     {
@@ -180,6 +182,19 @@ namespace DynamicIslandPC
                     }
                 }));
             };
+
+            _audioVisualizer = new AudioVisualizerService();
+            _audioVisualizer.BandsUpdated += bands =>
+            {
+                if (_visualizerUpdatePending) return;
+                _visualizerUpdatePending = true;
+                Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+                {
+                    _visualizerUpdatePending = false;
+                    UpdateVisualizerBars(bands);
+                });
+            };
+
             ApplyMusicInfo(musicService.GetCurrentMusicInfo());
             InitializeProgressTimer();
         }
@@ -189,6 +204,7 @@ namespace DynamicIslandPC
             _progressTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _progressTimer.Tick += (s, e) =>
             {
+                if (_isScrubbing) return;
                 if (lastMusicInfo == null || lastMusicInfo.Duration == TimeSpan.Zero) return;
                 if (lastMusicInfo.IsPlaying)
                     lastMusicInfo.Position += TimeSpan.FromSeconds(1);
@@ -247,6 +263,7 @@ namespace DynamicIslandPC
             source.AddHook(HwndHook);
             ApplyDisplayAffinity(excludeFromCapture);
             ApplyClickThroughMode();
+            WindowBlurHelper.SetAcrylicBlur(helper.Handle, false);
             EnsureTopmost();
         }
 
@@ -312,10 +329,22 @@ namespace DynamicIslandPC
                 return;
 
             var now = DateTime.UtcNow;
-            if ((now - _lastModeSwitchAt).TotalMilliseconds < 280)
+            if ((now - _lastModeSwitchAt).TotalMilliseconds < 250)
                 return;
 
             _lastModeSwitchAt = now;
+
+            if (isPaused)
+            {
+                isPaused = false;
+                _pauseDebounceTimer?.Stop();
+                _pauseDebounceTimer = null;
+                AnimateFromPaused();
+                musicService?.TogglePlayPause();
+                SaveSettings();
+                return;
+            }
+
             displayMode = (displayMode + 1) % 3;
             AnimateToMode();
             SaveSettings();
@@ -329,96 +358,91 @@ namespace DynamicIslandPC
             Height = baseHeight * scale;
             IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
 
+            EnsureActiveDisplayModeVisible();
+        }
+
+        private void EnsureActiveDisplayModeVisible()
+        {
             PausedMode.Visibility = Visibility.Collapsed;
+            PausedMode.Opacity = 0;
+
             MinimalMode.Visibility = displayMode == 0 ? Visibility.Visible : Visibility.Collapsed;
             CompactMode.Visibility = displayMode == 1 ? Visibility.Visible : Visibility.Collapsed;
             ExpandedMode.Visibility = displayMode == 2 ? Visibility.Visible : Visibility.Collapsed;
 
-            MinimalMode.Opacity = 1;
-            CompactMode.Opacity = 1;
-            ExpandedMode.Opacity = 1;
+            var activeGrid = GetDisplayModeGrid();
+            activeGrid.Opacity = 1;
         }
 
         private void AnimateToMode()
         {
+            _pauseInStoryboard?.Stop();
+            _pauseOutStoryboard?.Stop();
+            _pauseDebounceTimer?.Stop();
+            _pauseDebounceTimer = null;
+            isPaused = false;
+            PausedMode.Visibility = Visibility.Collapsed;
+            PausedMode.Opacity = 0;
+
             Grid currentMode = MinimalMode.Visibility == Visibility.Visible ? MinimalMode :
-                              CompactMode.Visibility == Visibility.Visible ? CompactMode : ExpandedMode;
+                              CompactMode.Visibility == Visibility.Visible ? CompactMode :
+                              ExpandedMode.Visibility == Visibility.Visible ? ExpandedMode : null;
             Grid targetMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
 
             _modeStoryboard?.Stop();
             ResetModeAnimationState(currentMode);
+
+            var (baseWidth, baseHeight) = GetModeSize(displayMode);
+            double targetWidth = baseWidth * scale;
+            double targetHeight = baseHeight * scale;
+            var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
+
+            if (currentMode == null || currentMode == targetMode)
+            {
+                EnsureActiveDisplayModeVisible();
+                Width = targetWidth;
+                Height = targetHeight;
+                Left = targetLeft;
+                Top = targetTop;
+                IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
+                return;
+            }
 
             var storyboard = new Storyboard();
             _modeStoryboard = storyboard;
 
             IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
             
-            // Анимация прозрачности для старого режима
-            var oldMode = displayMode == 0 ? (displayMode == 1 ? CompactMode : ExpandedMode) : 
-                         (displayMode == 1 ? (MinimalMode.Visibility == Visibility.Visible ? MinimalMode : ExpandedMode) : 
-                         (CompactMode.Visibility == Visibility.Visible ? CompactMode : MinimalMode));
+            targetMode.Visibility = Visibility.Visible;
+            targetMode.Opacity = 0;
             
-            if (currentMode != targetMode)
+            var fadeOut = new DoubleAnimation
             {
-                // Показываем целевой режим с нулевой прозрачностью
-                targetMode.Visibility = Visibility.Visible;
-                targetMode.Opacity = 0;
-                
-                // Анимация исчезновения старого режима
-                var fadeOut = new DoubleAnimation
-                {
-                    From = 1,
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(160),
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                };
-                Storyboard.SetTarget(fadeOut, currentMode);
-                Storyboard.SetTargetProperty(fadeOut, new PropertyPath("Opacity"));
-                storyboard.Children.Add(fadeOut);
-                
-                // Анимация появления нового режима
-                var fadeIn = new DoubleAnimation
-                {
-                    From = 0,
-                    To = 1,
-                    Duration = TimeSpan.FromMilliseconds(220),
-                    BeginTime = TimeSpan.FromMilliseconds(80),
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                };
-                Storyboard.SetTarget(fadeIn, targetMode);
-                Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
-                storyboard.Children.Add(fadeIn);
-                
-                // Скрываем старый режим после анимации
-                storyboard.Completed += (s, e) =>
-                {
-                    currentMode.Visibility = Visibility.Collapsed;
-                    currentMode.Opacity = 1;
-                    targetMode.Visibility = Visibility.Visible;
-                    targetMode.Opacity = 1;
-                    _modeStoryboard = null;
-                    EnsureTopmost();
-                };
-            }
-            else
+                From = 1,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(160),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(fadeOut, currentMode);
+            Storyboard.SetTargetProperty(fadeOut, new PropertyPath("Opacity"));
+            storyboard.Children.Add(fadeOut);
+            
+            var fadeIn = new DoubleAnimation
             {
-                storyboard.Completed += (s, e) =>
-                {
-                    _modeStoryboard = null;
-                    EnsureTopmost();
-                };
-            }
-            
-            var (baseWidth, baseHeight) = GetModeSize(displayMode);
-            double targetWidth = baseWidth * scale;
-            double targetHeight = baseHeight * scale;
-            
-            var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(220),
+                BeginTime = TimeSpan.FromMilliseconds(80),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(fadeIn, targetMode);
+            Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
+            storyboard.Children.Add(fadeIn);
             
             var widthAnimation = new DoubleAnimation
             {
                 To = targetWidth,
-                Duration = TimeSpan.FromMilliseconds(500),
+                Duration = TimeSpan.FromMilliseconds(450),
                 EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut }
             };
             Storyboard.SetTarget(widthAnimation, this);
@@ -428,7 +452,7 @@ namespace DynamicIslandPC
             var heightAnimation = new DoubleAnimation
             {
                 To = targetHeight,
-                Duration = TimeSpan.FromMilliseconds(600),
+                Duration = TimeSpan.FromMilliseconds(450),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
             };
             Storyboard.SetTarget(heightAnimation, this);
@@ -438,7 +462,7 @@ namespace DynamicIslandPC
             var leftAnimation = new DoubleAnimation
             {
                 To = targetLeft,
-                Duration = TimeSpan.FromMilliseconds(500),
+                Duration = TimeSpan.FromMilliseconds(450),
                 EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut }
             };
             Storyboard.SetTarget(leftAnimation, this);
@@ -448,12 +472,19 @@ namespace DynamicIslandPC
             var topAnimation = new DoubleAnimation
             {
                 To = targetTop,
-                Duration = TimeSpan.FromMilliseconds(500),
+                Duration = TimeSpan.FromMilliseconds(450),
                 EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut }
             };
             Storyboard.SetTarget(topAnimation, this);
             Storyboard.SetTargetProperty(topAnimation, new PropertyPath("Top"));
             storyboard.Children.Add(topAnimation);
+            
+            storyboard.Completed += (s, e) =>
+            {
+                EnsureActiveDisplayModeVisible();
+                _modeStoryboard = null;
+                EnsureTopmost();
+            };
             
             storyboard.Begin();
         }
@@ -463,10 +494,14 @@ namespace DynamicIslandPC
             MinimalMode.BeginAnimation(OpacityProperty, null);
             CompactMode.BeginAnimation(OpacityProperty, null);
             ExpandedMode.BeginAnimation(OpacityProperty, null);
+            PausedMode.BeginAnimation(OpacityProperty, null);
 
-            MinimalMode.Opacity = 1;
-            CompactMode.Opacity = 1;
-            ExpandedMode.Opacity = 1;
+            PausedMode.Opacity = 0;
+            PausedMode.Visibility = Visibility.Collapsed;
+
+            MinimalMode.Opacity = currentMode == MinimalMode ? 1 : 0;
+            CompactMode.Opacity = currentMode == CompactMode ? 1 : 0;
+            ExpandedMode.Opacity = currentMode == ExpandedMode ? 1 : 0;
 
             MinimalMode.Visibility = currentMode == MinimalMode ? Visibility.Visible : Visibility.Collapsed;
             CompactMode.Visibility = currentMode == CompactMode ? Visibility.Visible : Visibility.Collapsed;
@@ -514,21 +549,21 @@ namespace DynamicIslandPC
 
             AlbumArtPaused.Source = musicInfo.AlbumArt;
             ApplySourceVisuals(musicInfo.SourceApp);
-            UpdateAlbumPalette(MusicVisualHelper.GetAlbumPaletteCached(musicInfo.AlbumArt, $"{musicInfo.Title}|{musicInfo.Artist}|{musicInfo.SourceApp}"));
+            bool artUpdated = lastMusicInfo != null && 
+                              lastMusicInfo.AlbumArt == MusicInfoService.DefaultAlbumArt && 
+                              musicInfo.AlbumArt != null && 
+                              musicInfo.AlbumArt != MusicInfoService.DefaultAlbumArt;
+
+            if (trackChanged || lastMusicInfo == null || artUpdated)
+            {
+                UpdateAlbumPalette(MusicVisualHelper.GetAlbumPaletteCached(musicInfo.AlbumArt, $"{musicInfo.Title}|{musicInfo.Artist}|{musicInfo.SourceApp}"));
+            }
             UpdateTrayController(musicInfo);
             lastMusicInfo = musicInfo;
             UpdateSmartVisibility(musicInfo, trackChanged);
 
-            // Первый запуск без музыки — сразу PausedMode
-            if (lastMusicInfo == null && !musicInfo.IsPlaying)
-            {
-                isPaused = true;
-                var currentMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
-                currentMode.Visibility = Visibility.Collapsed;
-                PausedMode.Visibility = Visibility.Visible;
-            }
 
-            if (musicInfo.Duration > TimeSpan.Zero)
+            if (!_isScrubbing && musicInfo.Duration > TimeSpan.Zero)
                 SetProgressRatio(musicInfo.Position.TotalSeconds / musicInfo.Duration.TotalSeconds);
             
             UpdateDecorationVisibility(musicInfo.IsPlaying);
@@ -542,11 +577,13 @@ namespace DynamicIslandPC
                 StartRotation();
                 PulseAlbumArt();
                 SetProgressGlowStrength(0.9);
+                _audioVisualizer?.Start();
             }
             else
             {
                 StopRotation();
                 SetProgressGlowStrength(0.45);
+                _audioVisualizer?.Stop();
             }
 
             UpdatePlayPauseIcon(musicInfo.IsPlaying);
@@ -556,36 +593,54 @@ namespace DynamicIslandPC
             if (!hasDisplayableMusic)
             {
                 _pauseDebounceTimer?.Stop();
-                isPaused = false;
-                ShowDisplayModeWithoutAnimation();
+                _pauseDebounceTimer = null;
+                if (isPaused)
+                {
+                    isPaused = false;
+                    AnimateFromPaused();
+                }
+                else
+                {
+                    EnsureActiveDisplayModeVisible();
+                }
                 return;
             }
 
-            // РџРµСЂРµРєР»СЋС‡Р°РµРј СЂРµР¶РёРј РїР°СѓР·С‹
-            if (!musicInfo.IsPlaying && !isPaused)
+            if (musicInfo.IsPlaying)
             {
                 _pauseDebounceTimer?.Stop();
-                _pauseDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
-                _pauseDebounceTimer.Tick += (s, e) =>
+                _pauseDebounceTimer = null;
+
+                if (isPaused)
                 {
-                    _pauseDebounceTimer.Stop();
-                    if (!isPaused)
+                    isPaused = false;
+                    AnimateFromPaused();
+                }
+                else
+                {
+                    EnsureActiveDisplayModeVisible();
+                }
+            }
+            else
+            {
+                if (!isPaused)
+                {
+                    if (_pauseDebounceTimer == null)
                     {
-                        isPaused = true;
-                        AnimateToPaused();
+                        _pauseDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+                        _pauseDebounceTimer.Tick += (s, e) =>
+                        {
+                            _pauseDebounceTimer.Stop();
+                            _pauseDebounceTimer = null;
+                            if (!isPaused && (lastMusicInfo == null || !lastMusicInfo.IsPlaying))
+                            {
+                                isPaused = true;
+                                AnimateToPaused();
+                            }
+                        };
+                        _pauseDebounceTimer.Start();
                     }
-                };
-                _pauseDebounceTimer.Start();
-            }
-            else if (musicInfo.IsPlaying && isPaused)
-            {
-                _pauseDebounceTimer?.Stop();
-                isPaused = false;
-                AnimateFromPaused();
-            }
-            else if (musicInfo.IsPlaying)
-            {
-                _pauseDebounceTimer?.Stop();
+                }
             }
         }
         
@@ -612,11 +667,7 @@ namespace DynamicIslandPC
 
         private void ShowDisplayModeWithoutAnimation()
         {
-            PausedMode.Visibility = Visibility.Collapsed;
-            MinimalMode.Visibility = displayMode == 0 ? Visibility.Visible : Visibility.Collapsed;
-            CompactMode.Visibility = displayMode == 1 ? Visibility.Visible : Visibility.Collapsed;
-            ExpandedMode.Visibility = displayMode == 2 ? Visibility.Visible : Visibility.Collapsed;
-            GetDisplayModeGrid().Opacity = 1;
+            EnsureActiveDisplayModeVisible();
         }
 
         private static bool HasDisplayableMusic(MusicInfo musicInfo)
@@ -811,58 +862,39 @@ namespace DynamicIslandPC
 
         private void UpdateSmartVisibility(MusicInfo musicInfo, bool trackChanged)
         {
-            EnsureSmartHideTimer();
-
-            if (!HasDisplayableMusic(musicInfo))
+            if (!IsVisible)
             {
-                ScheduleSmartHide(TimeSpan.FromMilliseconds(SmartHideDelayMs));
-                return;
+                Opacity = 1;
+                Show();
             }
-
-            _smartHideTimer.Stop();
-            if (_isSmartHidden || !IsVisible)
-                ShowIslandFromSmartHide(trackChanged);
+            EnsureTopmost();
         }
 
         private void EnsureSmartHideTimer()
         {
-            if (_smartHideTimer != null)
-                return;
-
-            _smartHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(SmartHideDelayMs) };
-            _smartHideTimer.Tick += (s, e) =>
-            {
-                _smartHideTimer.Stop();
-                if (!HasDisplayableMusic(lastMusicInfo))
-                    HideIslandForSmartState();
-            };
         }
 
         private void ScheduleSmartHide(TimeSpan delay)
         {
-            EnsureSmartHideTimer();
-            _smartHideTimer.Stop();
-            _smartHideTimer.Interval = delay;
-            _smartHideTimer.Start();
         }
 
         private void ForceShowIsland()
         {
-            ShowIslandFromSmartHide(trackChanged: false);
-
-            if (!HasDisplayableMusic(lastMusicInfo))
-                ScheduleSmartHide(TimeSpan.FromMilliseconds(ForcedSmartShowMs));
+            if (!IsVisible)
+            {
+                Opacity = 1;
+                Show();
+            }
+            EnsureTopmost();
+            CycleDisplayMode(force: true);
         }
 
         private void ShowIslandFromSmartHide(bool trackChanged)
         {
             _isSmartHidden = false;
-            _smartHideTimer?.Stop();
-
-            BeginAnimation(OpacityProperty, null);
             if (!IsVisible)
             {
-                Opacity = 0;
+                Opacity = 1;
                 Show();
             }
 
@@ -870,51 +902,57 @@ namespace DynamicIslandPC
             EnsureTopmost();
             if (trackChanged)
                 PulseAlbumArt();
-
-            var fadeIn = new DoubleAnimation
-            {
-                From = Math.Min(Opacity, 0.35),
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(260),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            BeginAnimation(OpacityProperty, fadeIn);
         }
 
         private void HideIslandForSmartState()
         {
-            if (_isSmartHidden)
-                return;
-
-            _isSmartHidden = true;
-            BeginAnimation(OpacityProperty, null);
-
-            var fadeOut = new DoubleAnimation
-            {
-                From = Opacity,
-                To = 0,
-                Duration = TimeSpan.FromMilliseconds(260),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
-            };
-            fadeOut.Completed += (s, e) =>
-            {
-                if (_isSmartHidden)
-                    Hide();
-            };
-            BeginAnimation(OpacityProperty, fadeOut);
+            _isSmartHidden = false;
         }
 
         private void AnimateToPaused()
         {
-            var currentMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
-
+            _audioVisualizer?.Stop();
+            _modeStoryboard?.Stop();
+            _modeStoryboard = null;
             _pauseOutStoryboard?.Stop();
             _pauseInStoryboard?.Stop();
 
-            var fadeOut = new DoubleAnimation { From = 1, To = 0, Duration = TimeSpan.FromMilliseconds(300) };
+            var pausedSize = 60 * scale;
+            var (targetLeft, targetTop) = CalculateWindowPosition(pausedSize, pausedSize);
+
+            var currentMode = MinimalMode.Visibility == Visibility.Visible ? MinimalMode :
+                              CompactMode.Visibility == Visibility.Visible ? CompactMode :
+                              ExpandedMode.Visibility == Visibility.Visible ? ExpandedMode : null;
+
+            if (currentMode == null)
+            {
+                MinimalMode.Visibility = Visibility.Collapsed;
+                CompactMode.Visibility = Visibility.Collapsed;
+                ExpandedMode.Visibility = Visibility.Collapsed;
+                MinimalMode.Opacity = 0;
+                CompactMode.Opacity = 0;
+                ExpandedMode.Opacity = 0;
+
+                PausedMode.Visibility = Visibility.Visible;
+                PausedMode.Opacity = 1;
+                IslandBorder.CornerRadius = new CornerRadius(30 * scale);
+                Width = pausedSize;
+                Height = pausedSize;
+                Left = targetLeft;
+                Top = targetTop;
+                return;
+            }
+
+            var fadeOut = new DoubleAnimation { From = currentMode.Opacity, To = 0, Duration = TimeSpan.FromMilliseconds(200) };
             fadeOut.Completed += (s, e) =>
             {
-                currentMode.Visibility = Visibility.Collapsed;
+                MinimalMode.Visibility = Visibility.Collapsed;
+                CompactMode.Visibility = Visibility.Collapsed;
+                ExpandedMode.Visibility = Visibility.Collapsed;
+                MinimalMode.Opacity = 0;
+                CompactMode.Opacity = 0;
+                ExpandedMode.Opacity = 0;
+
                 PausedMode.Visibility = Visibility.Visible;
                 PausedMode.Opacity = 0;
 
@@ -925,23 +963,26 @@ namespace DynamicIslandPC
                 Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
                 _pauseInStoryboard.Children.Add(fadeIn);
 
-                var pausedSize = 60 * scale;
-
                 IslandBorder.CornerRadius = new CornerRadius(30 * scale);
-                var w = new DoubleAnimation { To = pausedSize, Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var w = new DoubleAnimation { To = pausedSize, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
                 Storyboard.SetTarget(w, this);
                 Storyboard.SetTargetProperty(w, new PropertyPath("Width"));
                 _pauseInStoryboard.Children.Add(w);
 
-                var h = new DoubleAnimation { To = pausedSize, Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var h = new DoubleAnimation { To = pausedSize, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
                 Storyboard.SetTarget(h, this);
                 Storyboard.SetTargetProperty(h, new PropertyPath("Height"));
                 _pauseInStoryboard.Children.Add(h);
 
-                var l = new DoubleAnimation { To = GetTargetLeft(pausedSize), Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var l = new DoubleAnimation { To = targetLeft, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
                 Storyboard.SetTarget(l, this);
                 Storyboard.SetTargetProperty(l, new PropertyPath("Left"));
                 _pauseInStoryboard.Children.Add(l);
+
+                var t = new DoubleAnimation { To = targetTop, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                Storyboard.SetTarget(t, this);
+                Storyboard.SetTargetProperty(t, new PropertyPath("Top"));
+                _pauseInStoryboard.Children.Add(t);
 
                 _pauseInStoryboard.Begin();
             };
@@ -950,49 +991,65 @@ namespace DynamicIslandPC
 
         private void AnimateFromPaused()
         {
-            var targetMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
+            if (lastMusicInfo != null && lastMusicInfo.IsPlaying)
+            {
+                _audioVisualizer?.Start();
+            }
+            var targetMode = GetDisplayModeGrid();
             var (baseWidth, baseHeight) = GetModeSize(displayMode);
+            var tw = baseWidth * scale;
+            var th = baseHeight * scale;
+            var (targetLeft, targetTop) = CalculateWindowPosition(tw, th);
 
+            _modeStoryboard?.Stop();
+            _modeStoryboard = null;
             _pauseInStoryboard?.Stop();
             _pauseOutStoryboard?.Stop();
             _pauseOutStoryboard = new Storyboard();
 
-            var fadeOut = new DoubleAnimation { From = 1, To = 0, Duration = TimeSpan.FromMilliseconds(200) };
+            var fadeOut = new DoubleAnimation { From = PausedMode.Opacity, To = 0, Duration = TimeSpan.FromMilliseconds(180) };
             fadeOut.Completed += (s, e) =>
             {
                 PausedMode.Visibility = Visibility.Collapsed;
-                targetMode.Visibility = Visibility.Visible;
+                PausedMode.Opacity = 0;
+
+                MinimalMode.Visibility = targetMode == MinimalMode ? Visibility.Visible : Visibility.Collapsed;
+                CompactMode.Visibility = targetMode == CompactMode ? Visibility.Visible : Visibility.Collapsed;
+                ExpandedMode.Visibility = targetMode == ExpandedMode ? Visibility.Visible : Visibility.Collapsed;
                 targetMode.Opacity = 0;
 
                 IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
 
-
-
                 var sb = new Storyboard();
 
-                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(300) };
+                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(250) };
                 Storyboard.SetTarget(fadeIn, targetMode);
                 Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
                 sb.Children.Add(fadeIn);
 
-                var tw = baseWidth * scale;
-                var w = new DoubleAnimation { To = tw, Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var w = new DoubleAnimation { To = tw, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
                 Storyboard.SetTarget(w, this);
                 Storyboard.SetTargetProperty(w, new PropertyPath("Width"));
                 sb.Children.Add(w);
 
-                var h = new DoubleAnimation { To = baseHeight * scale, Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var h = new DoubleAnimation { To = th, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
                 Storyboard.SetTarget(h, this);
                 Storyboard.SetTargetProperty(h, new PropertyPath("Height"));
                 sb.Children.Add(h);
 
-                var l = new DoubleAnimation { To = GetTargetLeft(tw), Duration = TimeSpan.FromMilliseconds(400), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var l = new DoubleAnimation { To = targetLeft, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
                 Storyboard.SetTarget(l, this);
                 Storyboard.SetTargetProperty(l, new PropertyPath("Left"));
                 sb.Children.Add(l);
 
+                var t = new DoubleAnimation { To = targetTop, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                Storyboard.SetTarget(t, this);
+                Storyboard.SetTargetProperty(t, new PropertyPath("Top"));
+                sb.Children.Add(t);
+
                 sb.Completed += (_, __) =>
                 {
+                    EnsureActiveDisplayModeVisible();
                     if (lastMusicInfo?.Duration > TimeSpan.Zero)
                         SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
                 };
@@ -1085,10 +1142,13 @@ namespace DynamicIslandPC
                 expandedGlow.Opacity = opacity * 0.55;
         }
 
+        private string _lastCompactMarqueeText;
+        private string _lastExpandedMarqueeText;
+
         private void UpdateTitleMarquee()
         {
-            UpdateSingleMarquee(CompactTitle, CompactTitleTranslate, ref _compactMarqueeStoryboard, 124);
-            UpdateSingleMarquee(TrackTitle, TrackTitleTranslate, ref _expandedMarqueeStoryboard, 246);
+            UpdateSingleMarquee(CompactTitle, CompactTitleTranslate, ref _compactMarqueeStoryboard, ref _lastCompactMarqueeText, 124);
+            UpdateSingleMarquee(TrackTitle, TrackTitleTranslate, ref _expandedMarqueeStoryboard, ref _lastExpandedMarqueeText, 246);
             CompactTitleOldTranslate.X = 0;
             TrackTitleOldTranslate.X = 0;
         }
@@ -1096,19 +1156,32 @@ namespace DynamicIslandPC
         private void StopTitleMarquee()
         {
             _compactMarqueeStoryboard?.Stop();
+            _compactMarqueeStoryboard = null;
             _expandedMarqueeStoryboard?.Stop();
+            _expandedMarqueeStoryboard = null;
+            CompactTitleTranslate.BeginAnimation(TranslateTransform.XProperty, null);
+            TrackTitleTranslate.BeginAnimation(TranslateTransform.XProperty, null);
             CompactTitleTranslate.X = 0;
             TrackTitleTranslate.X = 0;
+            _lastCompactMarqueeText = null;
+            _lastExpandedMarqueeText = null;
             CompactTitleOldTranslate.X = 0;
             TrackTitleOldTranslate.X = 0;
         }
 
-        private void UpdateSingleMarquee(TextBlock textBlock, TranslateTransform translate, ref Storyboard storyboard, double visibleWidth)
+        private void UpdateSingleMarquee(TextBlock textBlock, TranslateTransform translate, ref Storyboard storyboard, ref string lastText, double visibleWidth)
         {
+            var text = textBlock.Text;
+            if (string.Equals(text, lastText, StringComparison.Ordinal) && storyboard != null)
+                return;
+
+            lastText = text;
             storyboard?.Stop();
+            storyboard = null;
+            translate.BeginAnimation(TranslateTransform.XProperty, null);
             translate.X = 0;
 
-            var estimatedWidth = (textBlock.Text?.Length ?? 0) * textBlock.FontSize * 0.58;
+            var estimatedWidth = (text?.Length ?? 0) * textBlock.FontSize * 0.58;
             if (estimatedWidth <= visibleWidth + 18)
                 return;
 
@@ -1247,7 +1320,12 @@ namespace DynamicIslandPC
 
         private void UpdateEqualizerColors(Color accentColor)
         {
-            var brush = new SolidColorBrush(accentColor);
+            double luminance = (0.299 * accentColor.R + 0.587 * accentColor.G + 0.114 * accentColor.B) / 255.0;
+            Color eqColor = luminance < 0.35
+                ? Color.FromRgb(110, 225, 127) // #6EE17F vibrant live green
+                : accentColor;
+
+            var brush = new SolidColorBrush(eqColor);
             SetEqualizerFill(PlaybackIndicatorMinimal, brush);
             SetEqualizerFill(PlaybackIndicatorCompact, brush);
             SetEqualizerFill(PlaybackIndicatorExpanded, brush);
@@ -1416,14 +1494,47 @@ namespace DynamicIslandPC
                 var info = await UpdateChecker.CheckAsync();
                 if (info.HasUpdate)
                 {
-                    var result = System.Windows.MessageBox.Show(
-                        $"Доступна новая версия: {info.LatestVersion}\nТекущая версия: {info.CurrentVersion}\n\nОткрыть страницу релиза на GitHub?",
-                        "Dynamic Island PC",
-                        System.Windows.MessageBoxButton.YesNo,
-                        System.Windows.MessageBoxImage.Information);
+                    if (!string.IsNullOrEmpty(info.ExeDownloadUrl))
+                    {
+                        var result = System.Windows.MessageBox.Show(
+                            $"Доступна новая версия: {info.LatestVersion} (текущая: {info.CurrentVersion})\n\nОбновить приложение автоматически прямо сейчас?\n\n(Нажмите 'Да' для моментального авто-обновления, или 'Нет', чтобы открыть релиз на GitHub)",
+                            "Dynamic Island PC - Обновление",
+                            System.Windows.MessageBoxButton.YesNoCancel,
+                            System.Windows.MessageBoxImage.Information);
 
-                    if (result == System.Windows.MessageBoxResult.Yes)
-                        UpdateChecker.OpenRelease(info);
+                        if (result == System.Windows.MessageBoxResult.Yes)
+                        {
+                            try
+                            {
+                                await UpdateChecker.DownloadAndInstallAsync(info);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error("Auto-update failed", ex);
+                                System.Windows.MessageBox.Show(
+                                    $"Ошибка при автоматическом обновлении: {ex.Message}\nОткрываем страницу на GitHub...",
+                                    "Dynamic Island PC",
+                                    System.Windows.MessageBoxButton.OK,
+                                    System.Windows.MessageBoxImage.Warning);
+                                UpdateChecker.OpenRelease(info);
+                            }
+                        }
+                        else if (result == System.Windows.MessageBoxResult.No)
+                        {
+                            UpdateChecker.OpenRelease(info);
+                        }
+                    }
+                    else
+                    {
+                        var result = System.Windows.MessageBox.Show(
+                            $"Доступна новая версия: {info.LatestVersion}\nТекущая версия: {info.CurrentVersion}\n\nОткрыть страницу релиза на GitHub?",
+                            "Dynamic Island PC",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Information);
+
+                        if (result == System.Windows.MessageBoxResult.Yes)
+                            UpdateChecker.OpenRelease(info);
+                    }
                 }
                 else
                 {
@@ -1459,7 +1570,7 @@ namespace DynamicIslandPC
             Storyboard.SetTarget(opacityAnim, this);
             Storyboard.SetTargetProperty(opacityAnim, new PropertyPath("Opacity"));
             storyboard.Children.Add(opacityAnim);
-            
+            storyboard.Completed += (s, e) => { Opacity = 1; };
             storyboard.Begin();
         }
         
@@ -1480,17 +1591,181 @@ namespace DynamicIslandPC
             if (e.ChangedButton == MouseButton.Middle)
             {
                 musicService.TogglePlayPause();
+                e.Handled = true;
             }
         }
-        
+
+        private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (lockModeEnabled)
+                return;
+
+            if (e.OriginalSource is DependencyObject dep && IsInteractiveControl(dep))
+                return;
+
+            _dragStartPoint = e.GetPosition(this);
+            _isDraggingReady = true;
+        }
+
+        private void OnPreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isDraggingReady && e.LeftButton == MouseButtonState.Pressed)
+            {
+                Point currentPoint = e.GetPosition(this);
+                Vector diff = currentPoint - _dragStartPoint;
+
+                if (Math.Abs(diff.X) > 6 || Math.Abs(diff.Y) > 6)
+                {
+                    _isDraggingReady = false;
+                    try
+                    {
+                        this.Cursor = System.Windows.Input.Cursors.SizeAll;
+                        DragMove();
+
+                        var centerPoint = new System.Drawing.Point((int)Math.Round(this.Left + this.Width / 2.0), (int)Math.Round(this.Top + this.Height / 2.0));
+                        var dropScreen = System.Windows.Forms.Screen.FromPoint(centerPoint) ?? System.Windows.Forms.Screen.PrimaryScreen;
+                        if (dropScreen != null)
+                        {
+                            targetMonitorDeviceName = dropScreen.DeviceName;
+                            var wa = dropScreen.WorkingArea;
+                            var maxLeft = Math.Max(wa.Left, wa.Right - this.Width);
+                            var maxTop = Math.Max(wa.Top, wa.Bottom - this.Height);
+                            this.Left = Math.Clamp(this.Left, wa.Left, maxLeft);
+                            this.Top = Math.Clamp(this.Top, wa.Top, maxTop);
+                        }
+
+                        customX = this.Left + this.Width / 2.0;
+                        customY = this.Top;
+                        hasCustomPosition = true;
+
+                        SaveSettings();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("DragMove failed", ex);
+                    }
+                    finally
+                    {
+                        this.Cursor = System.Windows.Input.Cursors.Arrow;
+                    }
+                }
+            }
+        }
+
+        private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            this.Cursor = System.Windows.Input.Cursors.Arrow;
+            if (_isDraggingReady)
+            {
+                _isDraggingReady = false;
+                CycleDisplayMode();
+                e.Handled = true;
+            }
+        }
+
+        private static bool IsInteractiveControl(DependencyObject dep)
+        {
+            while (dep != null && dep is not Window)
+            {
+                if (dep is Button || dep is System.Windows.Controls.Primitives.ButtonBase || dep is TextBox)
+                    return true;
+                if (dep is FrameworkElement fe && (fe.Name == "ProgressContainerCompact" || fe.Name == "ProgressContainerExpanded"))
+                    return true;
+                dep = VisualTreeHelper.GetParent(dep);
+            }
+            return false;
+        }
+
+        private void ProgressContainer_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Grid grid && lastMusicInfo != null && lastMusicInfo.Duration > TimeSpan.Zero)
+            {
+                _isScrubbing = true;
+                _activeScrubberContainer = grid;
+                grid.CaptureMouse();
+                e.Handled = true;
+                HandleScrub(grid, e.GetPosition(grid).X, commit: false);
+            }
+        }
+
+        private void ProgressContainer_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isScrubbing && _activeScrubberContainer != null && e.LeftButton == MouseButtonState.Pressed)
+            {
+                HandleScrub(_activeScrubberContainer, e.GetPosition(_activeScrubberContainer).X, commit: false);
+                e.Handled = true;
+            }
+        }
+
+        private void ProgressContainer_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isScrubbing && _activeScrubberContainer != null)
+            {
+                _activeScrubberContainer.ReleaseMouseCapture();
+                HandleScrub(_activeScrubberContainer, e.GetPosition(_activeScrubberContainer).X, commit: true);
+                _isScrubbing = false;
+                _activeScrubberContainer = null;
+                e.Handled = true;
+            }
+        }
+
+        private void HandleScrub(Grid container, double mouseX, bool commit = false)
+        {
+            if (lastMusicInfo == null || lastMusicInfo.Duration <= TimeSpan.Zero) return;
+            double width = container.ActualWidth;
+            if (width <= 0) return;
+
+            double ratio = Math.Clamp(mouseX / width, 0.0, 1.0);
+            SetProgressRatio(ratio);
+
+            var newPos = TimeSpan.FromSeconds(ratio * lastMusicInfo.Duration.TotalSeconds);
+            lastMusicInfo.Position = newPos;
+            CurrentTimeText.Text = FormatTime(newPos);
+            var remaining = lastMusicInfo.Duration - newPos;
+            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+            TotalTimeText.Text = "-" + FormatTime(remaining);
+
+            if (commit)
+            {
+                _ = musicService.SeekToRatioAsync(ratio);
+            }
+        }
+
+        private void UpdateVisualizerBars(float[] bands)
+        {
+            if (bands == null || bands.Length < 4) return;
+            UpdateIndicatorBars(PlaybackIndicatorMinimal, bands, 4, 18);
+            UpdateIndicatorBars(PlaybackIndicatorCompact, bands, 4, 18);
+            UpdateIndicatorBars(PlaybackIndicatorExpanded, bands, 4, 20);
+        }
+
+        private void UpdateIndicatorBars(StackPanel indicator, float[] bands, double minH, double maxH)
+        {
+            if (indicator == null || indicator.Visibility != Visibility.Visible) return;
+            for (int i = 0; i < 4 && i < indicator.Children.Count; i++)
+            {
+                if (indicator.Children[i] is System.Windows.Shapes.Rectangle rect)
+                {
+                    double val = bands[i];
+                    rect.Height = minH + val * (maxH - minH);
+                }
+            }
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             var helper = new System.Windows.Interop.WindowInteropHelper(this);
-            UnregisterHotKey(helper.Handle, HOTKEY_ID);
+            if (helper.Handle != IntPtr.Zero)
+            {
+                var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
+                source?.RemoveHook(HwndHook);
+                UnregisterHotKey(helper.Handle, HOTKEY_ID);
+            }
+            _audioVisualizer?.Dispose();
             _progressTimer?.Stop();
-            _smartHideTimer?.Stop();
             _pauseDebounceTimer?.Stop();
             _topmostWatchdogTimer?.Stop();
+            StopTitleMarquee();
             SaveSettings();
             trayIcon?.Dispose();
             base.OnClosed(e);

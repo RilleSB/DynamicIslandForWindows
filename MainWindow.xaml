@@ -256,50 +256,10 @@
                             <!-- Right: Waveform Equalizer -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                                 <StackPanel x:Name="PlaybackIndicatorMinimal" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
-                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2.5,0">
-                                        <Rectangle.Triggers>
-                                            <EventTrigger RoutedEvent="Loaded">
-                                                <BeginStoryboard>
-                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                                        <DoubleAnimation Storyboard.TargetProperty="Height" From="6" To="16" Duration="0:0:0.45"/>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </EventTrigger>
-                                        </Rectangle.Triggers>
-                                    </Rectangle>
-                                    <Rectangle Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2.5,0">
-                                        <Rectangle.Triggers>
-                                            <EventTrigger RoutedEvent="Loaded">
-                                                <BeginStoryboard>
-                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="8" To="20" Duration="0:0:0.52"/>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </EventTrigger>
-                                        </Rectangle.Triggers>
-                                    </Rectangle>
-                                    <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF" Margin="0,0,2.5,0">
-                                        <Rectangle.Triggers>
-                                            <EventTrigger RoutedEvent="Loaded">
-                                                <BeginStoryboard>
-                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="6" To="14" Duration="0:0:0.38"/>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </EventTrigger>
-                                        </Rectangle.Triggers>
-                                    </Rectangle>
-                                    <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF">
-                                        <Rectangle.Triggers>
-                                            <EventTrigger RoutedEvent="Loaded">
-                                                <BeginStoryboard>
-                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                                        <DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.2" From="9" To="18" Duration="0:0:0.46"/>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </EventTrigger>
-                                        </Rectangle.Triggers>
-                                    </Rectangle>
+                                    <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                    <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                    <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" VerticalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- Optional Custom Decoration Container -->
@@ -391,18 +351,10 @@
                             <!-- Right Controls: Equalizer Waveform & Decor -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
                                 <StackPanel x:Name="PlaybackIndicatorCompact" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0" Visibility="Collapsed">
-                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2.5,0">
-                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" From="6" To="16" Duration="0:0:0.45"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
-                                    </Rectangle>
-                                    <Rectangle Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2.5,0">
-                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="8" To="20" Duration="0:0:0.52"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
-                                    </Rectangle>
-                                    <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF" Margin="0,0,2.5,0">
-                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="6" To="14" Duration="0:0:0.38"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
-                                    </Rectangle>
-                                    <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF">
-                                        <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.2" From="9" To="18" Duration="0:0:0.46"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
-                                    </Rectangle>
+                                    <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                    <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="#57C767" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                    <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#7AF08A" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                    <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" VerticalAlignment="Center"/>
                                 </StackPanel>
 
                                 <Grid x:Name="GifCompactContainer" Visibility="Collapsed" Width="46" Height="46" Margin="4,0,0,0">
@@ -420,8 +372,8 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Hidden Compact Progress Bar (Disabled) -->
-                        <Grid Grid.Row="1" Visibility="Collapsed">
+                        <!-- Compact Progress Bar (Disabled to preserve clean capsule aesthetics) -->
+                        <Grid x:Name="ProgressContainerCompact" Grid.Row="1" Visibility="Collapsed">
                             <Rectangle x:Name="ProgressTrackCompact" Height="0" Width="0"/>
                             <Rectangle x:Name="ProgressBarCompact" Height="0" Width="0"/>
                             <Ellipse x:Name="ProgressDotCompact" Width="0" Height="0"/>
@@ -503,18 +455,10 @@
                                 <!-- Top Right: Animated Waveform -->
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                                     <StackPanel x:Name="PlaybackIndicatorExpanded" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed">
-                                        <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" Margin="0,0,2.5,0">
-                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" From="6" To="16" Duration="0:0:0.45"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
-                                        </Rectangle>
-                                        <Rectangle Width="3" Height="16" RadiusX="1.5" RadiusY="1.5" Fill="#57C767" Margin="0,0,2.5,0">
-                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.08" From="8" To="20" Duration="0:0:0.52"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
-                                        </Rectangle>
-                                        <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#7AF08A" Margin="0,0,2.5,0">
-                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.14" From="5" To="14" Duration="0:0:0.38"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
-                                        </Rectangle>
-                                        <Rectangle Width="3" Height="15" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F">
-                                            <Rectangle.Triggers><EventTrigger RoutedEvent="Loaded"><BeginStoryboard><Storyboard RepeatBehavior="Forever" AutoReverse="True"><DoubleAnimation Storyboard.TargetProperty="Height" BeginTime="0:0:0.2" From="8" To="18" Duration="0:0:0.46"/></Storyboard></BeginStoryboard></EventTrigger></Rectangle.Triggers>
-                                        </Rectangle>
+                                        <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                        <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="#57C767" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                        <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#7AF08A" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
+                                        <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" VerticalAlignment="Center"/>
                                     </StackPanel>
 
                                     <Grid x:Name="GifExpandedContainer" Visibility="Collapsed" Width="36" Height="36">
@@ -540,14 +484,18 @@
                                 </Grid.RowDefinitions>
 
                                 <!-- Interactive Scrubber Bar -->
-                                <Grid Grid.Row="0" Margin="0,0,0,6" Height="10" VerticalAlignment="Center">
-                                    <Rectangle x:Name="ProgressTrackExpanded" Height="2.5" Fill="#20FFFFFF" RadiusX="1.25" RadiusY="1.25" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
-                                    <Rectangle x:Name="ProgressBarExpanded" Height="2.5" Fill="#FFFFFF" RadiusX="1.25" RadiusY="1.25" HorizontalAlignment="Left" Width="0" VerticalAlignment="Center">
+                                <Grid x:Name="ProgressContainerExpanded" Grid.Row="0" Margin="0,0,0,6" Height="14" VerticalAlignment="Center"
+                                      Background="Transparent" Cursor="Hand"
+                                      PreviewMouseLeftButtonDown="ProgressContainer_MouseDown"
+                                      PreviewMouseMove="ProgressContainer_MouseMove"
+                                      PreviewMouseLeftButtonUp="ProgressContainer_MouseUp">
+                                    <Rectangle x:Name="ProgressTrackExpanded" Height="3" Fill="#20FFFFFF" RadiusX="1.5" RadiusY="1.5" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                    <Rectangle x:Name="ProgressBarExpanded" Height="3" Fill="#FFFFFF" RadiusX="1.5" RadiusY="1.5" HorizontalAlignment="Left" Width="0" VerticalAlignment="Center">
                                         <Rectangle.Effect>
                                             <DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#FFFFFF" Opacity="0.55"/>
                                         </Rectangle.Effect>
                                     </Rectangle>
-                                    <Ellipse x:Name="ProgressDotExpanded" Width="6" Height="6" Fill="#FFFFFF" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0">
+                                    <Ellipse x:Name="ProgressDotExpanded" Width="7" Height="7" Fill="#FFFFFF" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,0">
                                         <Ellipse.Effect>
                                             <DropShadowEffect BlurRadius="6" ShadowDepth="0" Color="#FFFFFF" Opacity="0.7"/>
                                         </Ellipse.Effect>

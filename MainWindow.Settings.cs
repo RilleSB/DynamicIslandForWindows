@@ -214,6 +214,12 @@ namespace DynamicIslandPC
 
         private Screen GetTargetScreen()
         {
+            if (hasCustomPosition)
+            {
+                var point = new System.Drawing.Point((int)Math.Round(customX), (int)Math.Round(customY));
+                return Screen.FromPoint(point);
+            }
+
             if (!string.IsNullOrWhiteSpace(targetMonitorDeviceName))
             {
                 foreach (var s in Screen.AllScreens)
@@ -221,12 +227,6 @@ namespace DynamicIslandPC
                     if (string.Equals(s.DeviceName, targetMonitorDeviceName, StringComparison.OrdinalIgnoreCase))
                         return s;
                 }
-            }
-
-            if (hasCustomPosition)
-            {
-                var point = new System.Drawing.Point((int)Math.Round(customX), (int)Math.Round(customY));
-                return Screen.FromPoint(point);
             }
 
             return Screen.PrimaryScreen ?? (Screen.AllScreens.Length > 0 ? Screen.AllScreens[0] : null);
@@ -248,8 +248,10 @@ namespace DynamicIslandPC
             var workingArea = GetTargetWorkingArea(customX, customY);
             if (hasCustomPosition)
             {
-                var left = Math.Clamp(customX - targetWidth / 2, workingArea.Left, workingArea.Right - targetWidth);
-                var top = Math.Clamp(customY, workingArea.Top, workingArea.Bottom - targetHeight);
+                var maxLeft = Math.Max(workingArea.Left, workingArea.Right - targetWidth);
+                var maxTop = Math.Max(workingArea.Top, workingArea.Bottom - targetHeight);
+                var left = Math.Clamp(customX - targetWidth / 2, workingArea.Left, maxLeft);
+                var top = Math.Clamp(customY, workingArea.Top, maxTop);
                 return (left, top);
             }
 

@@ -42,10 +42,25 @@
 * **Paused Mode**: Subtle circular capsule with pause indicator.
 * **Track Reveal Overlay**: Non-intrusive floating pill that glides in for a few seconds when a new track starts.
 
-### 🔮 Liquid Glass Style (Beta)
+### 📊 Live Audio Spectrum Visualizer
+* Powered by real-time NAudio WASAPI loopback capture and 512-point FFT analysis.
+* 4 frequency bands (Bass, Low-Mid, Mid, High) dynamically react to the beats and rhythm of your actual desktop audio.
+* Integrated into Minimal, Compact, and Expanded mode indicator bars with smooth attack/decay physics.
+
+### 🔮 Liquid Glass with Native Acrylic & Mica Blur
 * Next-generation optical glassmorphism theme toggleable in Settings.
-* Translucent capsule (~40% opacity) that reveals desktop wallpapers and background apps beneath it.
+* Integrates native Windows 10/11 Acrylic backdrop blur (`SetWindowCompositionAttribute` & `DwmSetWindowAttribute`) behind the island.
 * Multi-layer optical physics: specular convex lens glare, 1.5px chamfered crystal bevel, diagonal light sheen, and fluid interior album caustics.
+
+### ⏱️ Interactive Track Scrubbing & Seeking
+* Click or drag smoothly along the progress line in **Compact** and **Expanded** modes to jump to any part of the track.
+* Directly synchronizes playback with Windows SMTC players in real-time.
+
+### 🔄 Seamless One-Click In-App Auto-Updater
+* Checks GitHub releases on demand and offers instant one-click in-app update with automatic restart.
+
+### 🖱️ Freeform Mouse Drag-and-Drop Positioning
+* Click and drag the island anywhere on your monitors to reposition it freely without opening settings.
 
 ### ⚡ 165Hz+ High Refresh Rate Sync
 * Native monitor refresh rate detection using Win32 APIs.
@@ -143,10 +158,25 @@ DynamicIslandPC hooks directly into the **Windows System Media Transport Control
 * **Режим паузы**: Лаконичная круглая капсула с иконкой паузы.
 * **Уведомление о смене трека (Track Reveal)**: Ненавязчивая плашка, мягко выплывающая на несколько секунд при переключении песни.
 
-### 🔮 Стиль Liquid Glass (Жидкое стекло, Beta)
+### 📊 Живой аудио-спектрум визуализатор
+* Настоящий спектральный анализатор на базе NAudio WASAPI loopback capture и 512-точечного FFT.
+* 4 частотные полосы (Bass, Low-Mid, Mid, Treble) динамически пульсируют под биты и ритм звука из вашей системы.
+* Интегрирован в индикаторы минимального, компактного и развернутого режимов с физикой сглаживания attack/decay.
+
+### 🔮 Стиль Liquid Glass с нативным размытием Acrylic / Mica
 * Реалистичный эффект премиального стекла, включаемый в настройках.
-* Честная полупрозрачность корпуса (~40%), сквозь которую проглядывают обои рабочего стола и окна.
+* Нативное аппаратное размытие Windows 10/11 Acrylic (`SetWindowCompositionAttribute` и `DwmSetWindowAttribute`) за островом.
 * Многослойная оптическая физика: выпуклая верхняя линза (lens glare), кристаллическая фаска 1.5px с преломлением света, диагональный отблеск и глубинная каустика цвета обложки.
+
+### ⏱️ Интерактивная перемотка треков (Scrubbing / Seeking)
+* Плавное перемещение по треку кликом или перетаскиванием ползунка в **Компактном** и **Развёрнутом** режимах.
+* Синхронизация перемотки с плеерами через Windows SMTC.
+
+### 🔄 Бесшовное авто-обновление в один клик
+* Проверка обновлений прямо из приложения с возможностью скачать и мгновенно перезапустить новую версию.
+
+### 🖱️ Свободное перемещение острова мышью (Drag & Drop)
+* Зажмите левую кнопку мыши и свободно двигайте остров по экрану и между мониторами. Положение сохраняется автоматически.
 
 ### ⚡ Синхронизация с высокой герцовкой (165 Гц+)
 * Автоматическое определение частоты обновления монитора через Win32 API.
