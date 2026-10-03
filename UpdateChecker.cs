@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace DynamicIslandPC
 {
-    internal sealed class UpdateInfo
+    public sealed class UpdateInfo
     {
         public bool HasUpdate { get; init; }
         public string CurrentVersion { get; init; }
@@ -14,10 +14,20 @@ namespace DynamicIslandPC
         public string ReleaseUrl { get; init; }
     }
 
-    internal static class UpdateChecker
+    public static class UpdateChecker
     {
-        public const string CurrentVersion = "V2.5";
+        public static string CurrentVersion => GetCurrentVersion();
         private const string LatestReleaseUrl = "https://api.github.com/repos/RilleSB/DynamicIslandForWindows/releases/latest";
+
+        private static string GetCurrentVersion()
+        {
+            var ver = typeof(UpdateChecker).Assembly.GetName().Version;
+            if (ver != null && ver.Major > 0)
+            {
+                return ver.Build > 0 ? $"V{ver.Major}.{ver.Minor}.{ver.Build}" : $"V{ver.Major}.{ver.Minor}";
+            }
+            return "V2.6.3";
+        }
 
         public static async Task<UpdateInfo> CheckAsync()
         {
@@ -59,7 +69,16 @@ namespace DynamicIslandPC
 
         private static Version NormalizeVersion(string value)
         {
-            var normalized = (value ?? string.Empty).Trim().TrimStart('v', 'V');
+            if (string.IsNullOrWhiteSpace(value))
+                return new Version(0, 0);
+
+            var normalized = value.Trim().TrimStart('v', 'V');
+            var match = System.Text.RegularExpressions.Regex.Match(normalized, @"^\d+(\.\d+)+");
+            if (match.Success && Version.TryParse(match.Value, out var parsed))
+            {
+                return parsed;
+            }
+
             return Version.TryParse(normalized, out var version) ? version : new Version(0, 0);
         }
     }

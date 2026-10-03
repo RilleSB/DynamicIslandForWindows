@@ -47,6 +47,7 @@ namespace DynamicIslandPC
         private AppSettings _settings;
         private DispatcherTimer _progressTimer;
         private DispatcherTimer _smartHideTimer;
+        private DispatcherTimer _topmostWatchdogTimer;
         private bool _isSmartHidden;
         private const int SmartHideDelayMs = 3500;
         private const int ForcedSmartShowMs = 8000;
@@ -68,6 +69,18 @@ namespace DynamicIslandPC
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool GetWindowDisplayAffinity(IntPtr hWnd, out uint pdwAffinity);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private const uint GW_HWNDPREV = 3;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
         
         private const int HOTKEY_ID = 9000;
         private const uint MOD_CONTROL = 0x0002;
@@ -142,6 +155,11 @@ namespace DynamicIslandPC
                     e.Handled = true;
                 }
             };
+
+            Deactivated += (s, e) => EnsureTopmost();
+            IsVisibleChanged += (s, e) => { if (IsVisible) EnsureTopmost(); };
+            StateChanged += (s, e) => { if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; EnsureTopmost(); };
+            InitializeTopmostWatchdog();
         }
 
         private void InitializeMusicService()
@@ -216,6 +234,40 @@ namespace DynamicIslandPC
             source.AddHook(HwndHook);
             ApplyDisplayAffinity(excludeFromCapture);
             ApplyClickThroughMode();
+            EnsureTopmost();
+        }
+
+        public void EnsureTopmost()
+        {
+            try
+            {
+                var helper = new System.Windows.Interop.WindowInteropHelper(this);
+                var hwnd = helper.Handle;
+                if (hwnd == IntPtr.Zero || !IsVisible || _isSmartHidden)
+                    return;
+
+                IntPtr prevHwnd = GetWindow(hwnd, GW_HWNDPREV);
+                if (prevHwnd != IntPtr.Zero)
+                {
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+
+                if (!Topmost)
+                {
+                    Topmost = true;
+                }
+            }
+            catch { }
+        }
+
+        private void InitializeTopmostWatchdog()
+        {
+            _topmostWatchdogTimer = new DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromSeconds(1.5)
+            };
+            _topmostWatchdogTimer.Tick += (s, e) => EnsureTopmost();
+            _topmostWatchdogTimer.Start();
         }
 
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -332,11 +384,16 @@ namespace DynamicIslandPC
                     targetMode.Visibility = Visibility.Visible;
                     targetMode.Opacity = 1;
                     _modeStoryboard = null;
+                    EnsureTopmost();
                 };
             }
             else
             {
-                storyboard.Completed += (s, e) => _modeStoryboard = null;
+                storyboard.Completed += (s, e) =>
+                {
+                    _modeStoryboard = null;
+                    EnsureTopmost();
+                };
             }
             
             var (baseWidth, baseHeight) = GetModeSize(displayMode);
@@ -797,6 +854,7 @@ namespace DynamicIslandPC
             }
 
             Topmost = true;
+            EnsureTopmost();
             if (trackChanged)
                 PulseAlbumArt();
 
@@ -1342,7 +1400,7 @@ namespace DynamicIslandPC
                 if (info.HasUpdate)
                 {
                     var result = System.Windows.MessageBox.Show(
-                        $"New version is available: {info.LatestVersion}\nCurrent version: {info.CurrentVersion}\n\nOpen GitHub release page?",
+                        $"Доступна новая версия: {info.LatestVersion}\nТекущая версия: {info.CurrentVersion}\n\nОткрыть страницу релиза на GitHub?",
                         "Dynamic Island PC",
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Information);
@@ -1353,7 +1411,7 @@ namespace DynamicIslandPC
                 else
                 {
                     System.Windows.MessageBox.Show(
-                        $"You are on the latest version: {info.CurrentVersion}",
+                        $"У вас установлена последняя версия: {info.CurrentVersion}",
                         "Dynamic Island PC",
                         System.Windows.MessageBoxButton.OK,
                         System.Windows.MessageBoxImage.Information);
@@ -1363,7 +1421,7 @@ namespace DynamicIslandPC
             {
                 Logger.Error("Failed to check for updates", ex);
                 System.Windows.MessageBox.Show(
-                    "Failed to check for updates. Details were written to the log.",
+                    "Не удалось проверить обновления. Подробности записаны в лог.",
                     "Dynamic Island PC",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Warning);
@@ -1415,6 +1473,7 @@ namespace DynamicIslandPC
             _progressTimer?.Stop();
             _smartHideTimer?.Stop();
             _pauseDebounceTimer?.Stop();
+            _topmostWatchdogTimer?.Stop();
             SaveSettings();
             trayIcon?.Dispose();
             base.OnClosed(e);
