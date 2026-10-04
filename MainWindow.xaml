@@ -112,7 +112,7 @@
 
             <Grid>
                 <!-- Dynamic Album Ambient Aura -->
-                <Border x:Name="AlbumAuraBorder" CornerRadius="30" Margin="1" IsHitTestVisible="False" Opacity="0.55">
+                <Border x:Name="AlbumAuraBorder" CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" Margin="1" IsHitTestVisible="False" Opacity="0.55">
                     <Border.Background>
                         <RadialGradientBrush Center="0.15,0.5" GradientOrigin="0.15,0.5" RadiusX="0.9" RadiusY="1.2">
                             <GradientStop x:Name="AlbumAuraPrimaryStop" Color="#223C3C44" Offset="0"/>
@@ -123,11 +123,11 @@
                 </Border>
 
                 <!-- Subtle Top Edge Light -->
-                <Border CornerRadius="30" Margin="1" IsHitTestVisible="False" Opacity="0.45" VerticalAlignment="Top" Height="18">
+                <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" Margin="1" IsHitTestVisible="False" Opacity="0.45">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                             <GradientStop Color="#25FFFFFF" Offset="0"/>
-                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            <GradientStop Color="#00FFFFFF" Offset="0.25"/>
                         </LinearGradientBrush>
                     </Border.Background>
                 </Border>
@@ -146,9 +146,9 @@
                     </Border>
 
                     <!-- Convex Lens Glare on top edge -->
-                    <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" VerticalAlignment="Top" Height="42" Opacity="0.85">
+                    <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" IsHitTestVisible="False" Opacity="0.85">
                         <Border.Background>
-                            <RadialGradientBrush Center="0.5,0.0" GradientOrigin="0.5,0.0" RadiusX="0.65" RadiusY="0.95">
+                            <RadialGradientBrush Center="0.5,0.0" GradientOrigin="0.5,0.0" RadiusX="0.65" RadiusY="0.55">
                                 <GradientStop Color="#A0FFFFFF" Offset="0"/>
                                 <GradientStop Color="#35FFFFFF" Offset="0.35"/>
                                 <GradientStop Color="#08FFFFFF" Offset="0.7"/>
@@ -170,12 +170,12 @@
                     </Border>
 
                     <!-- Liquid Caustic Under-glow Reflection -->
-                    <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" VerticalAlignment="Bottom" Height="28" Opacity="0.5">
+                    <Border CornerRadius="{Binding CornerRadius, ElementName=IslandBorder}" IsHitTestVisible="False" Opacity="0.5">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
                                 <GradientStop Color="#48FFFFFF" Offset="0"/>
-                                <GradientStop Color="#10FFFFFF" Offset="0.4"/>
-                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                <GradientStop Color="#10FFFFFF" Offset="0.18"/>
+                                <GradientStop Color="#00FFFFFF" Offset="0.4"/>
                             </LinearGradientBrush>
                         </Border.Background>
                     </Border>

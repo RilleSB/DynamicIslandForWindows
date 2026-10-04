@@ -548,14 +548,7 @@ namespace DynamicIslandPC
                         }
                     };
 
-                    IslandBorder.Effect = new System.Windows.Media.Effects.DropShadowEffect
-                    {
-                        BlurRadius = 36,
-                        ShadowDepth = 6,
-                        Direction = 270,
-                        Color = Colors.Black,
-                        Opacity = 0.60
-                    };
+                    IslandBorder.Effect = null;
                 }
                 else
                 {
