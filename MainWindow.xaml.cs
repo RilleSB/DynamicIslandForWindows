@@ -389,15 +389,12 @@ namespace DynamicIslandPC
                               ExpandedMode.Visibility == Visibility.Visible ? ExpandedMode : null;
             Grid targetMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
 
-            _modeStoryboard?.Stop();
-            ResetModeAnimationState(currentMode);
-
             var (baseWidth, baseHeight) = GetModeSize(displayMode);
             double targetWidth = baseWidth * scale;
             double targetHeight = baseHeight * scale;
             var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
 
-            if (currentMode == null || currentMode == targetMode)
+            if (currentMode == null)
             {
                 EnsureActiveDisplayModeVisible();
                 Width = targetWidth;
@@ -408,36 +405,66 @@ namespace DynamicIslandPC
                 return;
             }
 
+            if (currentMode == targetMode &&
+                Math.Abs(Left - targetLeft) < 1.0 &&
+                Math.Abs(Top - targetTop) < 1.0 &&
+                Math.Abs(Width - targetWidth) < 1.0 &&
+                Math.Abs(Height - targetHeight) < 1.0)
+            {
+                EnsureActiveDisplayModeVisible();
+                return;
+            }
+
+            double currentLeft = Left;
+            double currentTop = Top;
+            double currentWidth = Width;
+            double currentHeight = Height;
+
+            _modeStoryboard?.Stop();
+            ResetModeAnimationState(currentMode);
+
+            Left = currentLeft;
+            Top = currentTop;
+            Width = currentWidth;
+            Height = currentHeight;
+
             var storyboard = new Storyboard();
             _modeStoryboard = storyboard;
 
             IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
             
-            targetMode.Visibility = Visibility.Visible;
-            targetMode.Opacity = 0;
-            
-            var fadeOut = new DoubleAnimation
+            if (currentMode != targetMode)
             {
-                From = 1,
-                To = 0,
-                Duration = TimeSpan.FromMilliseconds(160),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(fadeOut, currentMode);
-            Storyboard.SetTargetProperty(fadeOut, new PropertyPath("Opacity"));
-            storyboard.Children.Add(fadeOut);
-            
-            var fadeIn = new DoubleAnimation
+                targetMode.Visibility = Visibility.Visible;
+                targetMode.Opacity = 0;
+                
+                var fadeOut = new DoubleAnimation
+                {
+                    From = 1,
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(160),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                Storyboard.SetTarget(fadeOut, currentMode);
+                Storyboard.SetTargetProperty(fadeOut, new PropertyPath("Opacity"));
+                storyboard.Children.Add(fadeOut);
+                
+                var fadeIn = new DoubleAnimation
+                {
+                    From = 0,
+                    To = 1,
+                    Duration = TimeSpan.FromMilliseconds(220),
+                    BeginTime = TimeSpan.FromMilliseconds(80),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                Storyboard.SetTarget(fadeIn, targetMode);
+                Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
+                storyboard.Children.Add(fadeIn);
+            }
+            else
             {
-                From = 0,
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(220),
-                BeginTime = TimeSpan.FromMilliseconds(80),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(fadeIn, targetMode);
-            Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
-            storyboard.Children.Add(fadeIn);
+                EnsureActiveDisplayModeVisible();
+            }
             
             var widthAnimation = new DoubleAnimation
             {
@@ -481,6 +508,15 @@ namespace DynamicIslandPC
             
             storyboard.Completed += (s, e) =>
             {
+                Left = targetLeft;
+                Top = targetTop;
+                Width = targetWidth;
+                Height = targetHeight;
+                BeginAnimation(LeftProperty, null);
+                BeginAnimation(TopProperty, null);
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+
                 EnsureActiveDisplayModeVisible();
                 _modeStoryboard = null;
                 EnsureTopmost();
