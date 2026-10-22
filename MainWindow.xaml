@@ -253,17 +253,17 @@
 
                             <!-- Vinyl Record Album Art Minimal -->
                             <Grid Grid.Column="0" Width="46" Height="46" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <Border Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True">
+                                <Border x:Name="AlbumArtMinimalBorder" Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="AlbumArtMinimalScale" ScaleX="1" ScaleY="1"/>
+                                    </Border.RenderTransform>
                                     <Grid>
-                                        <Image x:Name="AlbumArtMinimal" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                        <Image x:Name="AlbumArtMinimal" Width="46" Height="46" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                             <Image.Clip>
                                                 <RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/>
                                             </Image.Clip>
                                             <Image.RenderTransform>
-                                                <TransformGroup>
-                                                    <ScaleTransform x:Name="AlbumArtMinimalScale" ScaleX="1" ScaleY="1"/>
-                                                    <RotateTransform x:Name="AlbumArtMinimalRotation" Angle="0"/>
-                                                </TransformGroup>
+                                                <RotateTransform x:Name="AlbumArtMinimalRotation" Angle="0"/>
                                             </Image.RenderTransform>
                                         </Image>
                                         <Ellipse Width="42" Height="42" Stroke="#20FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
@@ -277,7 +277,7 @@
 
                             <!-- Right: Waveform Equalizer -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
-                                <StackPanel x:Name="PlaybackIndicatorMinimal" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
+                                <StackPanel x:Name="PlaybackIndicatorMinimal" Orientation="Horizontal" VerticalAlignment="Center" Height="20" Visibility="Collapsed">
                                     <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="#CCFFFFFF" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
                                     <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="#E6FFFFFF" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
                                     <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#B8FFFFFF" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
@@ -285,7 +285,10 @@
                                 </StackPanel>
 
                                 <!-- Optional Custom Decoration Container -->
-                                <Grid x:Name="GifMinimalContainer" Visibility="Collapsed" Width="46" Height="46" Margin="6,0,0,0">
+                                <Grid x:Name="GifMinimalContainer" Visibility="Collapsed" Width="46" Height="46" Margin="6,0,0,0" RenderTransformOrigin="0.5,0.5">
+                                    <Grid.RenderTransform>
+                                        <ScaleTransform x:Name="GifMinimalScale" ScaleX="1" ScaleY="1"/>
+                                    </Grid.RenderTransform>
                                     <Border Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF">
                                         <Image x:Name="GifMinimal" Width="42" Height="42" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
                                             <Image.Clip>
@@ -328,7 +331,7 @@
                                 <Grid Grid.Column="0" Width="46" Height="46" Margin="10,0,0,0" VerticalAlignment="Center">
                                     <Border Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True">
                                         <Grid>
-                                            <Image x:Name="AlbumArtOld" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                            <Image x:Name="AlbumArtOld" Width="46" Height="46" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                                 <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/></Image.Clip>
                                                 <Image.RenderTransform>
                                                     <TransformGroup>
@@ -364,15 +367,15 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Grid Grid.Column="0" Width="46" Height="46" Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <Border Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True">
+                                    <Border x:Name="AlbumArtBorder" Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
+                                        <Border.RenderTransform>
+                                            <ScaleTransform x:Name="AlbumArtScale" ScaleX="1" ScaleY="1"/>
+                                        </Border.RenderTransform>
                                         <Grid>
-                                            <Image x:Name="AlbumArt" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                            <Image x:Name="AlbumArt" Width="46" Height="46" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                                 <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/></Image.Clip>
                                                 <Image.RenderTransform>
-                                                    <TransformGroup>
-                                                        <ScaleTransform x:Name="AlbumArtScale" ScaleX="1" ScaleY="1"/>
-                                                        <RotateTransform x:Name="AlbumArtRotation" Angle="0"/>
-                                                    </TransformGroup>
+                                                    <RotateTransform x:Name="AlbumArtRotation" Angle="0"/>
                                                 </Image.RenderTransform>
                                             </Image>
                                             <Ellipse Width="42" Height="42" Stroke="#20FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
@@ -401,14 +404,17 @@
 
                             <!-- Right Controls: Equalizer Waveform & Decor -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
-                                <StackPanel x:Name="PlaybackIndicatorCompact" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0" Visibility="Collapsed">
+                                <StackPanel x:Name="PlaybackIndicatorCompact" Orientation="Horizontal" VerticalAlignment="Center" Height="20" Margin="0,0,6,0" Visibility="Collapsed">
                                     <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
                                     <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="#57C767" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
                                     <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#7AF08A" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
                                     <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" VerticalAlignment="Center"/>
                                 </StackPanel>
 
-                                <Grid x:Name="GifCompactContainer" Visibility="Collapsed" Width="46" Height="46" Margin="4,0,0,0">
+                                <Grid x:Name="GifCompactContainer" Visibility="Collapsed" Width="46" Height="46" Margin="4,0,0,0" RenderTransformOrigin="0.5,0.5">
+                                    <Grid.RenderTransform>
+                                        <ScaleTransform x:Name="GifCompactScale" ScaleX="1" ScaleY="1"/>
+                                    </Grid.RenderTransform>
                                     <Border Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF">
                                         <Image x:Name="GifCompact" Width="40" Height="40" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
                                             <Image.Clip><RectangleGeometry Rect="0,0,40,40" RadiusX="10" RadiusY="10"/></Image.Clip>
@@ -458,7 +464,7 @@
                                     <Grid Grid.Column="0" Width="60" Height="60" VerticalAlignment="Center">
                                         <Border Width="60" Height="60" CornerRadius="30" Background="#141418" BorderBrush="#30FFFFFF" BorderThickness="1" ClipToBounds="True">
                                             <Grid>
-                                                <Image x:Name="AlbumArtExpandedOld" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                <Image x:Name="AlbumArtExpandedOld" Width="60" Height="60" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                                     <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="30" RadiusY="30"/></Image.Clip>
                                                     <Image.RenderTransform>
                                                         <TransformGroup>
@@ -494,18 +500,18 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid Grid.Column="0" Width="60" Height="60" VerticalAlignment="Center">
-                                        <Border Width="60" Height="60" CornerRadius="30" Background="#141418" BorderBrush="#30FFFFFF" BorderThickness="1" ClipToBounds="True">
+                                        <Border x:Name="AlbumArtExpandedBorder" Width="60" Height="60" CornerRadius="30" Background="#141418" BorderBrush="#30FFFFFF" BorderThickness="1" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
+                                            <Border.RenderTransform>
+                                                <ScaleTransform x:Name="AlbumArtExpandedScale" ScaleX="1" ScaleY="1"/>
+                                            </Border.RenderTransform>
                                             <Border.Effect>
                                                 <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Color="#000000" Opacity="0.5"/>
                                             </Border.Effect>
                                             <Grid>
-                                                <Image x:Name="AlbumArtExpanded" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                <Image x:Name="AlbumArtExpanded" Width="60" Height="60" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                                     <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="30" RadiusY="30"/></Image.Clip>
                                                     <Image.RenderTransform>
-                                                        <TransformGroup>
-                                                            <ScaleTransform x:Name="AlbumArtExpandedScale" ScaleX="1" ScaleY="1"/>
-                                                            <RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/>
-                                                        </TransformGroup>
+                                                        <RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/>
                                                     </Image.RenderTransform>
                                                 </Image>
                                                 <Ellipse Width="54" Height="54" Stroke="#20FFFFFF" StrokeThickness="0.7" IsHitTestVisible="False"/>
@@ -534,14 +540,17 @@
 
                                 <!-- Top Right: Animated Waveform -->
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
-                                    <StackPanel x:Name="PlaybackIndicatorExpanded" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="Collapsed">
+                                    <StackPanel x:Name="PlaybackIndicatorExpanded" Orientation="Horizontal" VerticalAlignment="Center" Height="22" Margin="0,0,8,0" Visibility="Collapsed">
                                         <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
                                         <Rectangle Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="#57C767" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
                                         <Rectangle Width="3" Height="10" RadiusX="1.5" RadiusY="1.5" Fill="#7AF08A" Margin="0,0,2.5,0" VerticalAlignment="Center"/>
                                         <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5" Fill="#6EE17F" VerticalAlignment="Center"/>
                                     </StackPanel>
 
-                                    <Grid x:Name="GifExpandedContainer" Visibility="Collapsed" Width="36" Height="36">
+                                    <Grid x:Name="GifExpandedContainer" Visibility="Collapsed" Width="36" Height="36" RenderTransformOrigin="0.5,0.5">
+                                        <Grid.RenderTransform>
+                                            <ScaleTransform x:Name="GifExpandedScale" ScaleX="1" ScaleY="1"/>
+                                        </Grid.RenderTransform>
                                         <Border Width="36" Height="36" CornerRadius="9" Background="#1AFFFFFF">
                                             <Image x:Name="GifExpanded" Width="32" Height="32" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
                                                 <Image.Clip><RectangleGeometry Rect="0,0,32,32" RadiusX="8" RadiusY="8"/></Image.Clip>

@@ -25,6 +25,8 @@ namespace DynamicIslandPC
         public bool LiquidGlassEnabled { get; set; } = false;
         public string TargetMonitorDeviceName { get; set; } = "";
         public bool ExcludeFromCapture { get; set; } = false;
+        public bool VinylRotationEnabled { get; set; } = true;
+        public bool AudioReactiveBreathingEnabled { get; set; } = true;
     }
 
     public static class SettingsService

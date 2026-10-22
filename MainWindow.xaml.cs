@@ -58,9 +58,13 @@ namespace DynamicIslandPC
         private bool _isSmartHidden;
         private AudioVisualizerService _audioVisualizer;
         private volatile bool _visualizerUpdatePending = false;
+        private float _band0, _band1, _band2, _band3;
+        private readonly Action _renderVisualizerAction;
         private volatile bool _musicInfoUpdatePending = false;
         private bool _isScrubbing = false;
         private Grid _activeScrubberContainer = null;
+        private DateTime _lastProgressTickTime = DateTime.UtcNow;
+        private DateTime _lastSeekTime = DateTime.MinValue;
         private Point _dragStartPoint;
         private bool _isDraggingReady = false;
         
@@ -102,6 +106,7 @@ namespace DynamicIslandPC
 
         public MainWindow()
         {
+            _renderVisualizerAction = RenderVisualizer;
             try
             {
                 Logger.Log("Application starting...");
@@ -120,6 +125,13 @@ namespace DynamicIslandPC
                 RegisterGlobalHotkey();
                 InitializeTrayIcon();
                 AnimateStartup();
+                var startupTrimTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+                startupTrimTimer.Tick += (s, e) =>
+                {
+                    startupTrimTimer.Stop();
+                    TrimMemory();
+                };
+                startupTrimTimer.Start();
                 Logger.Log("Application started successfully");
             }
             catch (Exception ex)
@@ -192,15 +204,12 @@ namespace DynamicIslandPC
             };
 
             _audioVisualizer = new AudioVisualizerService();
-            _audioVisualizer.BandsUpdated += bands =>
+            _audioVisualizer.BandsUpdated += (b0, b1, b2, b3) =>
             {
+                _band0 = b0; _band1 = b1; _band2 = b2; _band3 = b3;
                 if (_visualizerUpdatePending) return;
                 _visualizerUpdatePending = true;
-                Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
-                {
-                    _visualizerUpdatePending = false;
-                    UpdateVisualizerBars(bands);
-                });
+                Dispatcher.BeginInvoke(DispatcherPriority.Render, _renderVisualizerAction);
             };
 
             ApplyMusicInfo(musicService.GetCurrentMusicInfo());
@@ -209,24 +218,42 @@ namespace DynamicIslandPC
 
         private void InitializeProgressTimer()
         {
-            _progressTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _lastProgressTickTime = DateTime.UtcNow;
+            _progressTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(250) };
             _progressTimer.Tick += (s, e) =>
             {
+                var now = DateTime.UtcNow;
+                var delta = now - _lastProgressTickTime;
+                _lastProgressTickTime = now;
+
                 if (_isScrubbing) return;
-                if (lastMusicInfo == null || lastMusicInfo.Duration == TimeSpan.Zero) return;
-                if (lastMusicInfo.IsPlaying)
-                    lastMusicInfo.Position += TimeSpan.FromSeconds(1);
+                if (lastMusicInfo == null || lastMusicInfo.Duration <= TimeSpan.Zero) return;
+
+                if (lastMusicInfo.IsPlaying && !isPaused)
+                {
+                    lastMusicInfo.Position += delta;
+                    if (lastMusicInfo.Position > lastMusicInfo.Duration)
+                        lastMusicInfo.Position = lastMusicInfo.Duration;
+                }
+
                 SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
             };
             _progressTimer.Start();
+
+            ProgressTrackExpanded.SizeChanged += (s, e) =>
+            {
+                if (!_isScrubbing && lastMusicInfo?.Duration > TimeSpan.Zero)
+                    SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
+            };
         }
 
         private void SetProgressRatio(double ratio)
         {
             if (isPaused) return;
-            ratio = Math.Min(1.0, Math.Max(0.0, ratio));
+            ratio = Math.Clamp(ratio, 0.0, 1.0);
             void Apply(System.Windows.Shapes.Rectangle track, System.Windows.Shapes.Rectangle bar, System.Windows.Shapes.Ellipse dot)
             {
+                if (track == null || bar == null || dot == null) return;
                 var w = track.ActualWidth;
                 if (w <= 0) return;
                 var filled = w * ratio;
@@ -236,7 +263,7 @@ namespace DynamicIslandPC
             Apply(ProgressTrackCompact, ProgressBarCompact, ProgressDotCompact);
             Apply(ProgressTrackExpanded, ProgressBarExpanded, ProgressDotExpanded);
 
-            if (lastMusicInfo != null)
+            if (lastMusicInfo != null && !_isScrubbing)
             {
                 CurrentTimeText.Text = FormatTime(lastMusicInfo.Position);
                 var remaining = lastMusicInfo.Duration > TimeSpan.Zero
@@ -246,7 +273,6 @@ namespace DynamicIslandPC
                     remaining = TimeSpan.Zero;
                 TotalTimeText.Text = "-" + FormatTime(remaining);
             }
-
         }
 
         private static string FormatTime(TimeSpan time)
@@ -554,6 +580,10 @@ namespace DynamicIslandPC
                 EnsureActiveDisplayModeVisible();
                 _modeStoryboard = null;
                 EnsureTopmost();
+                if (lastMusicInfo?.Duration > TimeSpan.Zero)
+                {
+                    SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
+                }
             };
             
             storyboard.Begin();
@@ -634,12 +664,38 @@ namespace DynamicIslandPC
                 UpdateAlbumPalette(MusicVisualHelper.GetAlbumPaletteCached(musicInfo.AlbumArt, $"{musicInfo.Title}|{musicInfo.Artist}|{musicInfo.SourceApp}"));
             }
             UpdateTrayController(musicInfo);
-            lastMusicInfo = musicInfo;
+
+            if (trackChanged || lastMusicInfo == null)
+            {
+                lastMusicInfo = musicInfo;
+                _lastProgressTickTime = DateTime.UtcNow;
+                if (!_isScrubbing && musicInfo.Duration > TimeSpan.Zero)
+                    SetProgressRatio(musicInfo.Position.TotalSeconds / musicInfo.Duration.TotalSeconds);
+            }
+            else
+            {
+                bool inSeekCooldown = (DateTime.UtcNow - _lastSeekTime).TotalSeconds < 1.5;
+                if (!_isScrubbing && !inSeekCooldown)
+                {
+                    double diffSeconds = Math.Abs((musicInfo.Position - lastMusicInfo.Position).TotalSeconds);
+                    if (diffSeconds > 2.0 || lastMusicInfo.Position == TimeSpan.Zero)
+                    {
+                        lastMusicInfo.Position = musicInfo.Position;
+                        _lastProgressTickTime = DateTime.UtcNow;
+                    }
+                }
+
+                lastMusicInfo.IsPlaying = musicInfo.IsPlaying;
+                if (musicInfo.Duration > TimeSpan.Zero)
+                    lastMusicInfo.Duration = musicInfo.Duration;
+                lastMusicInfo.AlbumArt = musicInfo.AlbumArt;
+                lastMusicInfo.SourceApp = musicInfo.SourceApp;
+
+                if (!_isScrubbing && lastMusicInfo.Duration > TimeSpan.Zero)
+                    SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
+            }
+
             UpdateSmartVisibility(musicInfo, trackChanged);
-
-
-            if (!_isScrubbing && musicInfo.Duration > TimeSpan.Zero)
-                SetProgressRatio(musicInfo.Position.TotalSeconds / musicInfo.Duration.TotalSeconds);
             
             UpdateDecorationVisibility(musicInfo.IsPlaying);
             var gifVisible = musicInfo.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
@@ -650,13 +706,17 @@ namespace DynamicIslandPC
             if (musicInfo.IsPlaying)
             {
                 StartRotation();
-                PulseAlbumArt();
+                if (!audioReactiveBreathingEnabled)
+                {
+                    PulseAlbumArt();
+                }
                 SetProgressGlowStrength(0.9);
                 _audioVisualizer?.Start();
             }
             else
             {
                 StopRotation();
+                ResetBreathing();
                 SetProgressGlowStrength(0.45);
                 _audioVisualizer?.Stop();
             }
@@ -981,7 +1041,7 @@ namespace DynamicIslandPC
 
             Topmost = true;
             EnsureTopmost();
-            if (trackChanged)
+            if (trackChanged && !audioReactiveBreathingEnabled)
                 PulseAlbumArt();
         }
 
@@ -993,7 +1053,10 @@ namespace DynamicIslandPC
         private void AnimateToPaused()
         {
             CancelDropPeek();
+            StopRotation();
+            ResetBreathing();
             _audioVisualizer?.Stop();
+            TrimMemory();
             _modeStoryboard?.Stop();
             _modeStoryboard = null;
             _pauseOutStoryboard?.Stop();
@@ -1201,6 +1264,13 @@ namespace DynamicIslandPC
                 });
 
                 var pulseY = pulseX.Clone();
+                pulseX.Completed += (s, e) =>
+                {
+                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                    scale.ScaleX = 1.0;
+                    scale.ScaleY = 1.0;
+                };
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulseX);
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulseY);
             }
@@ -1278,6 +1348,7 @@ namespace DynamicIslandPC
 
         private void StartRotation()
         {
+            if (!vinylRotationEnabled) return;
             if (_vinylClock == null)
             {
                 _vinylClock = _vinylRotationAnimation.CreateClock();
@@ -1395,8 +1466,11 @@ namespace DynamicIslandPC
             Slide(CompactContentOld, CompactContentNew, CompactOldTranslate, CompactNewTranslate, compactExitX, compactEnterX);
             Slide(ExpandedContentOld, ExpandedContentNew, ExpandedOldTranslate, ExpandedNewTranslate, expandedExitX, expandedEnterX);
 
-            PulseAlbumArt();
-            PulseIslandDropletOnTrackChange();
+            if (!audioReactiveBreathingEnabled)
+            {
+                PulseAlbumArt();
+                PulseIslandDropletOnTrackChange();
+            }
         }
 
         private void PulseIslandDropletOnTrackChange()
@@ -1426,6 +1500,14 @@ namespace DynamicIslandPC
             {
                 EasingFunction = new BackEase { Amplitude = 0.2, EasingMode = EasingMode.EaseOut }
             });
+
+            pulseX.Completed += (s, e) =>
+            {
+                IslandBorderScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                IslandBorderScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                IslandBorderScale.ScaleX = 1.0;
+                IslandBorderScale.ScaleY = 1.0;
+            };
 
             IslandBorderScale.BeginAnimation(ScaleTransform.ScaleXProperty, pulseX);
             IslandBorderScale.BeginAnimation(ScaleTransform.ScaleYProperty, pulseY);
@@ -2112,28 +2194,126 @@ namespace DynamicIslandPC
 
             if (commit)
             {
-                _ = musicService.SeekToRatioAsync(ratio);
+                _lastSeekTime = DateTime.UtcNow;
+                _lastProgressTickTime = DateTime.UtcNow;
+                _ = musicService.SeekToPositionAsync(newPos);
             }
         }
 
-        private void UpdateVisualizerBars(float[] bands)
+        [DllImport("psapi.dll")]
+        private static extern int EmptyWorkingSet(IntPtr hwProc);
+
+        public static void TrimMemory()
         {
-            if (bands == null || bands.Length < 4) return;
-            UpdateIndicatorBars(PlaybackIndicatorMinimal, bands, 4, 18);
-            UpdateIndicatorBars(PlaybackIndicatorCompact, bands, 4, 18);
-            UpdateIndicatorBars(PlaybackIndicatorExpanded, bands, 4, 20);
+            try
+            {
+                GC.Collect(2, GCCollectionMode.Aggressive, blocking: false, compacting: true);
+                GC.WaitForPendingFinalizers();
+                EmptyWorkingSet(System.Diagnostics.Process.GetCurrentProcess().Handle);
+            }
+            catch { }
         }
 
-        private void UpdateIndicatorBars(StackPanel indicator, float[] bands, double minH, double maxH)
+        private double _breathingScale = 1.0;
+        private double _artBreathingScale = 1.0;
+
+        private void RenderVisualizer()
+        {
+            _visualizerUpdatePending = false;
+            UpdateIndicatorBars(PlaybackIndicatorMinimal, _band0, _band1, _band2, _band3, 4, 18);
+            UpdateIndicatorBars(PlaybackIndicatorCompact, _band0, _band1, _band2, _band3, 4, 18);
+            UpdateIndicatorBars(PlaybackIndicatorExpanded, _band0, _band1, _band2, _band3, 4, 20);
+
+            if (audioReactiveBreathingEnabled && !_isPeekingDrop)
+            {
+                ApplyAudioBreathing(_band0, _band1, _band2, _band3);
+            }
+        }
+
+        private void ApplyAudioBreathing(float b0, float b1, float b2, float b3)
+        {
+            if (IslandBorderScale == null) return;
+
+            // Full-spectrum dynamic energy mix with boosted high-frequency accent:
+            // Highs (b3: 32%), Mids (b2: 26%), Low-Mid (b1: 18%), Bass (b0: 24%)
+            float totalEnergy = Math.Clamp(b0 * 0.24f + b1 * 0.18f + b2 * 0.26f + b3 * 0.32f, 0f, 1f);
+
+            // Bounded to <= 1.000 so the capsule never clips against the OS window boundary!
+            double targetScale = 0.970 + Math.Min(0.030, totalEnergy * 0.030);
+            if (targetScale > _breathingScale)
+                _breathingScale = _breathingScale * 0.45 + targetScale * 0.55; // responsive attack
+            else
+                _breathingScale = _breathingScale * 0.76 + targetScale * 0.24; // smooth organic decay
+
+            _breathingScale = Math.Min(1.0, _breathingScale);
+
+            if (Math.Abs(IslandBorderScale.ScaleX - _breathingScale) > 0.0004)
+            {
+                IslandBorderScale.ScaleX = _breathingScale;
+                IslandBorderScale.ScaleY = _breathingScale;
+            }
+
+            // Punchy album art vinyl & custom decoration pop:
+            double artTarget = 1.0 + Math.Min(0.075, totalEnergy * 0.075);
+            if (artTarget > _artBreathingScale)
+                _artBreathingScale = _artBreathingScale * 0.40 + artTarget * 0.60;
+            else
+                _artBreathingScale = _artBreathingScale * 0.74 + artTarget * 0.26;
+
+            SetScale(AlbumArtMinimalScale, _artBreathingScale);
+            SetScale(AlbumArtScale, _artBreathingScale);
+            SetScale(AlbumArtExpandedScale, _artBreathingScale);
+            SetScale(GifMinimalScale, _artBreathingScale);
+            SetScale(GifCompactScale, _artBreathingScale);
+            SetScale(GifExpandedScale, _artBreathingScale);
+        }
+
+        private static void SetScale(ScaleTransform transform, double scale)
+        {
+            if (transform != null && Math.Abs(transform.ScaleX - scale) > 0.0005)
+            {
+                transform.ScaleX = scale;
+                transform.ScaleY = scale;
+            }
+        }
+
+        private void ResetBreathing()
+        {
+            _breathingScale = 1.0;
+            _artBreathingScale = 1.0;
+            if (IslandBorderScale != null)
+            {
+                IslandBorderScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                IslandBorderScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                IslandBorderScale.ScaleX = 1.0;
+                IslandBorderScale.ScaleY = 1.0;
+            }
+            SetScale(AlbumArtMinimalScale, 1.0);
+            SetScale(AlbumArtScale, 1.0);
+            SetScale(AlbumArtExpandedScale, 1.0);
+            SetScale(GifMinimalScale, 1.0);
+            SetScale(GifCompactScale, 1.0);
+            SetScale(GifExpandedScale, 1.0);
+        }
+
+        private static void UpdateIndicatorBars(StackPanel indicator, float b0, float b1, float b2, float b3, double minH, double maxH)
         {
             if (indicator == null || indicator.Visibility != Visibility.Visible) return;
-            for (int i = 0; i < 4 && i < indicator.Children.Count; i++)
+            var children = indicator.Children;
+            if (children.Count < 4) return;
+
+            double range = maxH - minH;
+            SetBarHeight(children[0], minH + b0 * range);
+            SetBarHeight(children[1], minH + b1 * range);
+            SetBarHeight(children[2], minH + b2 * range);
+            SetBarHeight(children[3], minH + b3 * range);
+        }
+
+        private static void SetBarHeight(UIElement element, double height)
+        {
+            if (element is System.Windows.Shapes.Rectangle rect && Math.Abs(rect.Height - height) > 0.4)
             {
-                if (indicator.Children[i] is System.Windows.Shapes.Rectangle rect)
-                {
-                    double val = bands[i];
-                    rect.Height = minH + val * (maxH - minH);
-                }
+                rect.Height = height;
             }
         }
 

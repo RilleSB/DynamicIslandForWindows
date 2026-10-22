@@ -22,6 +22,8 @@ namespace DynamicIslandPC
         private bool liquidGlassEnabled = false;
         private string targetMonitorDeviceName = "";
         private bool excludeFromCapture = false;
+        private bool vinylRotationEnabled = true;
+        private bool audioReactiveBreathingEnabled = true;
 
         private readonly AppSettings settings;
         private readonly Action<double, double> onPositionChanged;
@@ -32,6 +34,8 @@ namespace DynamicIslandPC
         private readonly Action<bool> onLiquidGlassChanged;
         private readonly Action<string> onMonitorChanged;
         private readonly Action<bool> onExcludeFromCaptureChanged;
+        private readonly Action<bool> onVinylRotationChanged;
+        private readonly Action<bool> onAudioReactiveBreathingChanged;
         private Forms.Screen currentScreen;
 
         public SettingsWindow(
@@ -45,7 +49,9 @@ namespace DynamicIslandPC
             Action<bool, string> decorationChangedCallback = null,
             Action<bool> liquidGlassChangedCallback = null,
             Action<string> monitorChangedCallback = null,
-            Action<bool> excludeFromCaptureChangedCallback = null)
+            Action<bool> excludeFromCaptureChangedCallback = null,
+            Action<bool> vinylRotationChangedCallback = null,
+            Action<bool> audioReactiveBreathingChangedCallback = null)
         {
             InitializeComponent();
 
@@ -58,6 +64,8 @@ namespace DynamicIslandPC
             onLiquidGlassChanged = liquidGlassChangedCallback;
             onMonitorChanged = monitorChangedCallback;
             onExcludeFromCaptureChanged = excludeFromCaptureChangedCallback;
+            onVinylRotationChanged = vinylRotationChangedCallback;
+            onAudioReactiveBreathingChanged = audioReactiveBreathingChangedCallback;
 
             isDarkTheme = settings.IsDarkTheme;
             backgroundColorHex = string.IsNullOrWhiteSpace(settings.BackgroundColor) ? "#FF000000" : settings.BackgroundColor;
@@ -68,6 +76,8 @@ namespace DynamicIslandPC
             liquidGlassEnabled = settings.LiquidGlassEnabled;
             targetMonitorDeviceName = settings.TargetMonitorDeviceName ?? string.Empty;
             excludeFromCapture = settings.ExcludeFromCapture;
+            vinylRotationEnabled = settings.VinylRotationEnabled;
+            audioReactiveBreathingEnabled = settings.AudioReactiveBreathingEnabled;
 
             var screens = Forms.Screen.AllScreens;
             int selectedMonitorIndex = 0;
@@ -114,6 +124,8 @@ namespace DynamicIslandPC
             DecorationEnabledCheckBox.IsChecked = decorationEnabled;
             LiquidGlassCheckBox.IsChecked = liquidGlassEnabled;
             ExcludeFromCaptureCheckBox.IsChecked = excludeFromCapture;
+            VinylRotationCheckBox.IsChecked = vinylRotationEnabled;
+            AudioReactiveBreathingCheckBox.IsChecked = audioReactiveBreathingEnabled;
             isUpdating = false;
 
             UpdateThemeButtons();
@@ -527,6 +539,22 @@ namespace DynamicIslandPC
             excludeFromCapture = ExcludeFromCaptureCheckBox.IsChecked == true;
             settings.ExcludeFromCapture = excludeFromCapture;
             onExcludeFromCaptureChanged?.Invoke(excludeFromCapture);
+        }
+
+        private void VinylRotationChanged(object sender, RoutedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+            vinylRotationEnabled = VinylRotationCheckBox.IsChecked == true;
+            settings.VinylRotationEnabled = vinylRotationEnabled;
+            onVinylRotationChanged?.Invoke(vinylRotationEnabled);
+        }
+
+        private void AudioReactiveBreathingChanged(object sender, RoutedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+            audioReactiveBreathingEnabled = AudioReactiveBreathingCheckBox.IsChecked == true;
+            settings.AudioReactiveBreathingEnabled = audioReactiveBreathingEnabled;
+            onAudioReactiveBreathingChanged?.Invoke(audioReactiveBreathingEnabled);
         }
 
         private void LiquidGlassChanged(object sender, RoutedEventArgs e)

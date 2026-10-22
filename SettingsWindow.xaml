@@ -381,6 +381,34 @@
                     </StackPanel>
                 </Border>
 
+                <Border Background="#2B2B31" BorderBrush="#3D3D46" BorderThickness="1" CornerRadius="16" Padding="16" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="Анимации и эффекты" Style="{StaticResource SectionTitle}"/>
+
+                        <CheckBox x:Name="VinylRotationCheckBox"
+                                  Content="Крутящийся винил"
+                                  Foreground="White"
+                                  FontWeight="SemiBold"
+                                  FontSize="13"
+                                  Margin="0,2,0,4"
+                                  Checked="VinylRotationChanged"
+                                  Unchecked="VinylRotationChanged"/>
+                        <TextBlock Text="Обложка трека непрерывно вращается по кругу как виниловая пластинка во время музыки."
+                                   Style="{StaticResource HintText}" Margin="0,0,0,12"/>
+
+                        <CheckBox x:Name="AudioReactiveBreathingCheckBox"
+                                  Content="Дыхание под визуализацию звука"
+                                  Foreground="White"
+                                  FontWeight="SemiBold"
+                                  FontSize="13"
+                                  Margin="0,0,0,4"
+                                  Checked="AudioReactiveBreathingChanged"
+                                  Unchecked="AudioReactiveBreathingChanged"/>
+                        <TextBlock Text="Островок и пластинка мягко «дышат» и пульсируют в такт низким частотам и басам играющего трека."
+                                   Style="{StaticResource HintText}"/>
+                    </StackPanel>
+                </Border>
+
                 <Border Background="#2B2B31" BorderBrush="#5B4A78" BorderThickness="1.5" CornerRadius="16" Padding="16" Margin="0,0,0,14">
                     <StackPanel>
                         <Grid Margin="0,0,0,8">

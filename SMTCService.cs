@@ -114,6 +114,11 @@ namespace DynamicIslandPC
             TriggerFetch(30);
         }
 
+        private void OnTimelinePropertiesChanged(GlobalSystemMediaTransportControlsSession sender, TimelinePropertiesChangedEventArgs args)
+        {
+            TriggerFetch(20);
+        }
+
         public void TriggerFetch(int debounceMs = 50)
         {
             lock (stateLock)
@@ -208,6 +213,7 @@ namespace DynamicIslandPC
             {
                 currentSession.MediaPropertiesChanged += OnMediaPropertiesChanged;
                 currentSession.PlaybackInfoChanged += OnPlaybackInfoChanged;
+                currentSession.TimelinePropertiesChanged += OnTimelinePropertiesChanged;
             }
             catch (Exception ex)
             {
@@ -223,6 +229,7 @@ namespace DynamicIslandPC
                 {
                     currentSession.MediaPropertiesChanged -= OnMediaPropertiesChanged;
                     currentSession.PlaybackInfoChanged -= OnPlaybackInfoChanged;
+                    currentSession.TimelinePropertiesChanged -= OnTimelinePropertiesChanged;
                 }
                 catch { }
                 currentSession = null;
@@ -341,6 +348,25 @@ namespace DynamicIslandPC
             }
             catch { }
 
+            bool isPlaying = IsPlaying(session);
+            TimeSpan currentPos = timeline?.Position ?? TimeSpan.Zero;
+            TimeSpan totalDuration = timeline?.EndTime ?? TimeSpan.Zero;
+
+            // Extrapolate position when playing so progress doesn't freeze between infrequent SMTC timeline updates:
+            if (timeline != null && isPlaying && timeline.LastUpdatedTime != default)
+            {
+                var elapsed = DateTimeOffset.UtcNow - timeline.LastUpdatedTime;
+                if (elapsed > TimeSpan.Zero && elapsed.TotalHours < 12)
+                {
+                    currentPos += elapsed;
+                }
+            }
+
+            if (totalDuration > TimeSpan.Zero && currentPos > totalDuration)
+            {
+                currentPos = totalDuration;
+            }
+
             var info = new MusicInfo
             {
                 Title = sanitizedTitle,
@@ -350,10 +376,10 @@ namespace DynamicIslandPC
                 RawArtist = rawArtist,
                 RawSourceApp = rawSource,
                 SessionScore = ScoreSession(session, sanitizedTitle, sanitizedArtist, props.Thumbnail != null, BrowserSourceEnabled, isCurrentSystem),
-                IsPlaying = IsPlaying(session),
+                IsPlaying = isPlaying,
                 HasMedia = true,
-                Position = timeline?.Position ?? TimeSpan.Zero,
-                Duration = timeline?.EndTime ?? TimeSpan.Zero
+                Position = currentPos,
+                Duration = totalDuration
             };
 
             if (props.Thumbnail == null)
@@ -410,6 +436,7 @@ namespace DynamicIslandPC
                                         image.BeginInit();
                                         image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
                                         image.CacheOption = BitmapCacheOption.OnLoad;
+                                        image.DecodePixelWidth = 256;
                                         image.StreamSource = memStream;
                                         image.EndInit();
                                     }

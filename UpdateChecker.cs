@@ -28,7 +28,7 @@ namespace DynamicIslandPC
             {
                 return ver.Build > 0 ? $"V{ver.Major}.{ver.Minor}.{ver.Build}" : $"V{ver.Major}.{ver.Minor}";
             }
-            return "V3.1";
+            return "V3.2";
         }
 
         public static async Task<UpdateInfo> CheckAsync()

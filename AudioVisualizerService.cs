@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading;
 using NAudio.Wave;
 
@@ -12,6 +13,8 @@ namespace DynamicIslandPC
         private bool isDisposed;
 
         private const int FftSize = 512;
+        private static readonly double[] HannWindow = PrecomputeHannWindow();
+
         private readonly float[] sampleBuffer = new float[FftSize];
         private int sampleBufferPos;
 
@@ -20,9 +23,26 @@ namespace DynamicIslandPC
         private readonly float[] currentBands = new float[4];
         private readonly float[] smoothedBands = new float[4];
 
+        private static readonly Guid SubTypeIeeeFloat = new("00000003-0000-0010-8000-00AA00389B71");
+        private static readonly Guid SubTypePcm = new("00000001-0000-0010-8000-00AA00389B71");
+
+        private Timer silenceTimer;
+        private long _lastDataTick;
+
         public bool IsEnabled { get; set; } = true;
 
-        public event Action<float[]> BandsUpdated;
+        public event Action<float, float, float, float> BandsUpdated;
+
+        private static double[] PrecomputeHannWindow()
+        {
+            var window = new double[FftSize];
+            double factor = 2.0 * Math.PI / (FftSize - 1);
+            for (int i = 0; i < FftSize; i++)
+            {
+                window[i] = 0.5 * (1.0 - Math.Cos(factor * i));
+            }
+            return window;
+        }
 
         public void Start()
         {
@@ -47,6 +67,8 @@ namespace DynamicIslandPC
                     };
                     capture.StartRecording();
                     isRunning = true;
+                    _lastDataTick = Environment.TickCount64;
+                    StartSilenceWatchdog();
                 }
                 catch (Exception ex)
                 {
@@ -60,6 +82,8 @@ namespace DynamicIslandPC
         {
             lock (syncRoot)
             {
+                StopSilenceWatchdog();
+
                 if (!isRunning && capture == null)
                     return;
 
@@ -82,6 +106,51 @@ namespace DynamicIslandPC
             }
         }
 
+        private void StartSilenceWatchdog()
+        {
+            silenceTimer?.Dispose();
+            silenceTimer = new Timer(_ =>
+            {
+                if (!isRunning) return;
+                long elapsed = Environment.TickCount64 - _lastDataTick;
+                if (elapsed > 70)
+                {
+                    float sb0, sb1, sb2, sb3;
+                    bool hasActiveValue = false;
+                    lock (syncRoot)
+                    {
+                        for (int i = 0; i < 4; i++)
+                        {
+                            smoothedBands[i] *= 0.72f;
+                            if (smoothedBands[i] < 0.005f)
+                                smoothedBands[i] = 0f;
+                            else
+                                hasActiveValue = true;
+                        }
+                        sb0 = smoothedBands[0];
+                        sb1 = smoothedBands[1];
+                        sb2 = smoothedBands[2];
+                        sb3 = smoothedBands[3];
+                    }
+
+                    if (hasActiveValue || elapsed < 280)
+                    {
+                        BandsUpdated?.Invoke(sb0, sb1, sb2, sb3);
+                    }
+                }
+            }, null, 50, 50);
+        }
+
+        private void StopSilenceWatchdog()
+        {
+            try
+            {
+                silenceTimer?.Dispose();
+                silenceTimer = null;
+            }
+            catch { }
+        }
+
         public float[] GetSmoothedBands()
         {
             lock (syncRoot)
@@ -102,7 +171,7 @@ namespace DynamicIslandPC
                     smoothedBands[i] = 0;
                 }
             }
-            BandsUpdated?.Invoke(new float[4]);
+            BandsUpdated?.Invoke(0f, 0f, 0f, 0f);
         }
 
         private void OnDataAvailable(object sender, WaveInEventArgs e)
@@ -113,25 +182,100 @@ namespace DynamicIslandPC
             try
             {
                 var waveFormat = capture?.WaveFormat;
-                if (waveFormat == null || waveFormat.Encoding != WaveFormatEncoding.IeeeFloat)
+                if (waveFormat == null)
                     return;
 
                 int channels = waveFormat.Channels;
-                int bytesPerSample = 4;
-                int stride = channels * bytesPerSample;
-                int sampleCount = e.BytesRecorded / stride;
+                if (channels <= 0)
+                    return;
 
-                for (int i = 0; i < sampleCount; i++)
+                int bits = waveFormat.BitsPerSample;
+                bool isFloat = waveFormat.Encoding == WaveFormatEncoding.IeeeFloat ||
+                               (waveFormat is WaveFormatExtensible ext && ext.SubFormat == SubTypeIeeeFloat);
+
+                if (isFloat && bits == 32)
                 {
-                    float left = BitConverter.ToSingle(e.Buffer, i * stride);
-                    float right = channels > 1 ? BitConverter.ToSingle(e.Buffer, i * stride + bytesPerSample) : left;
-                    float mono = (left + right) * 0.5f;
+                    int sampleCount = e.BytesRecorded / (channels * 4);
+                    var floatSpan = MemoryMarshal.Cast<byte, float>(e.Buffer.AsSpan(0, e.BytesRecorded));
 
-                    sampleBuffer[sampleBufferPos++] = mono;
-                    if (sampleBufferPos >= FftSize)
+                    for (int i = 0; i < sampleCount; i++)
                     {
-                        sampleBufferPos = 0;
-                        ProcessFft();
+                        int baseIdx = i * channels;
+                        float left = floatSpan[baseIdx];
+                        float right = channels > 1 ? floatSpan[baseIdx + 1] : left;
+                        float mono = (left + right) * 0.5f;
+
+                        sampleBuffer[sampleBufferPos++] = mono;
+                        if (sampleBufferPos >= FftSize)
+                        {
+                            sampleBufferPos = 0;
+                            ProcessFft();
+                        }
+                    }
+                }
+                else if (bits == 16)
+                {
+                    int sampleCount = e.BytesRecorded / (channels * 2);
+                    var shortSpan = MemoryMarshal.Cast<byte, short>(e.Buffer.AsSpan(0, e.BytesRecorded));
+
+                    for (int i = 0; i < sampleCount; i++)
+                    {
+                        int baseIdx = i * channels;
+                        float left = shortSpan[baseIdx] / 32768.0f;
+                        float right = channels > 1 ? (shortSpan[baseIdx + 1] / 32768.0f) : left;
+                        float mono = (left + right) * 0.5f;
+
+                        sampleBuffer[sampleBufferPos++] = mono;
+                        if (sampleBufferPos >= FftSize)
+                        {
+                            sampleBufferPos = 0;
+                            ProcessFft();
+                        }
+                    }
+                }
+                else if (bits == 24)
+                {
+                    int bytesPerFrame = channels * 3;
+                    int frameCount = e.BytesRecorded / bytesPerFrame;
+                    for (int i = 0; i < frameCount; i++)
+                    {
+                        int offset = i * bytesPerFrame;
+                        int leftSample = e.Buffer[offset] | (e.Buffer[offset + 1] << 8) | ((sbyte)e.Buffer[offset + 2] << 16);
+                        float left = leftSample / 8388608.0f;
+                        float right = left;
+                        if (channels > 1)
+                        {
+                            int rightSample = e.Buffer[offset + 3] | (e.Buffer[offset + 4] << 8) | ((sbyte)e.Buffer[offset + 5] << 16);
+                            right = rightSample / 8388608.0f;
+                        }
+                        float mono = (left + right) * 0.5f;
+
+                        sampleBuffer[sampleBufferPos++] = mono;
+                        if (sampleBufferPos >= FftSize)
+                        {
+                            sampleBufferPos = 0;
+                            ProcessFft();
+                        }
+                    }
+                }
+                else if (bits == 32)
+                {
+                    int sampleCount = e.BytesRecorded / (channels * 4);
+                    var intSpan = MemoryMarshal.Cast<byte, int>(e.Buffer.AsSpan(0, e.BytesRecorded));
+
+                    for (int i = 0; i < sampleCount; i++)
+                    {
+                        int baseIdx = i * channels;
+                        float left = intSpan[baseIdx] / 2147483648.0f;
+                        float right = channels > 1 ? (intSpan[baseIdx + 1] / 2147483648.0f) : left;
+                        float mono = (left + right) * 0.5f;
+
+                        sampleBuffer[sampleBufferPos++] = mono;
+                        if (sampleBufferPos >= FftSize)
+                        {
+                            sampleBufferPos = 0;
+                            ProcessFft();
+                        }
                     }
                 }
             }
@@ -142,9 +286,7 @@ namespace DynamicIslandPC
         {
             for (int i = 0; i < FftSize; i++)
             {
-                // Hann window
-                double window = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (FftSize - 1)));
-                fftReal[i] = sampleBuffer[i] * window;
+                fftReal[i] = sampleBuffer[i] * HannWindow[i];
                 fftImag[i] = 0;
             }
 
@@ -160,12 +302,13 @@ namespace DynamicIslandPC
             float b2 = AverageMagnitude(9, 28);
             float b3 = AverageMagnitude(29, 90);
 
-            // Dynamic gain scaling
-            float scale0 = Math.Clamp(b0 * 3.8f, 0f, 1f);
-            float scale1 = Math.Clamp(b1 * 5.2f, 0f, 1f);
-            float scale2 = Math.Clamp(b2 * 6.5f, 0f, 1f);
-            float scale3 = Math.Clamp(b3 * 8.0f, 0f, 1f);
+            // Calibrated sensitivity with increased accent on highs
+            float scale0 = Math.Clamp(b0 * 1.35f, 0f, 1f);
+            float scale1 = Math.Clamp(b1 * 1.85f, 0f, 1f);
+            float scale2 = Math.Clamp(b2 * 2.65f, 0f, 1f);
+            float scale3 = Math.Clamp(b3 * 3.85f, 0f, 1f);
 
+            float sb0, sb1, sb2, sb3;
             lock (syncRoot)
             {
                 currentBands[0] = scale0;
@@ -173,17 +316,24 @@ namespace DynamicIslandPC
                 currentBands[2] = scale2;
                 currentBands[3] = scale3;
 
-                // Smooth attack and decay
+                // Smooth organic attack and musical decay (snappier attack on crisp highs)
                 for (int i = 0; i < 4; i++)
                 {
+                    float attack = i >= 2 ? 0.62f : 0.48f;
                     if (currentBands[i] > smoothedBands[i])
-                        smoothedBands[i] = smoothedBands[i] * 0.4f + currentBands[i] * 0.6f;
+                        smoothedBands[i] = smoothedBands[i] * (1f - attack) + currentBands[i] * attack;
                     else
-                        smoothedBands[i] = smoothedBands[i] * 0.82f + currentBands[i] * 0.18f;
+                        smoothedBands[i] = smoothedBands[i] * 0.85f + currentBands[i] * 0.15f;
                 }
+
+                sb0 = smoothedBands[0];
+                sb1 = smoothedBands[1];
+                sb2 = smoothedBands[2];
+                sb3 = smoothedBands[3];
             }
 
-            BandsUpdated?.Invoke(GetSmoothedBands());
+            _lastDataTick = Environment.TickCount64;
+            BandsUpdated?.Invoke(sb0, sb1, sb2, sb3);
         }
 
         private float AverageMagnitude(int startBin, int endBin)

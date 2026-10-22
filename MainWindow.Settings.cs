@@ -18,6 +18,8 @@ namespace DynamicIslandPC
         private bool liquidGlassEnabled = false;
         private string targetMonitorDeviceName = "";
         private bool excludeFromCapture = false;
+        private bool vinylRotationEnabled = true;
+        private bool audioReactiveBreathingEnabled = true;
 
         private void ApplySettings(AppSettings s)
         {
@@ -40,6 +42,8 @@ namespace DynamicIslandPC
             liquidGlassEnabled = s.LiquidGlassEnabled;
             targetMonitorDeviceName = s.TargetMonitorDeviceName ?? string.Empty;
             excludeFromCapture = s.ExcludeFromCapture;
+            vinylRotationEnabled = s.VinylRotationEnabled;
+            audioReactiveBreathingEnabled = s.AudioReactiveBreathingEnabled;
             ApplyLiquidGlassStyle(liquidGlassEnabled);
             ApplyDisplayAffinity(excludeFromCapture);
         }
@@ -65,6 +69,8 @@ namespace DynamicIslandPC
             _settings.LiquidGlassEnabled = liquidGlassEnabled;
             _settings.TargetMonitorDeviceName = targetMonitorDeviceName;
             _settings.ExcludeFromCapture = excludeFromCapture;
+            _settings.VinylRotationEnabled = vinylRotationEnabled;
+            _settings.AudioReactiveBreathingEnabled = audioReactiveBreathingEnabled;
             SettingsService.Save(_settings);
         }
 
@@ -337,6 +343,14 @@ namespace DynamicIslandPC
                     exclude =>
                     {
                         SetExcludeFromCapture(exclude);
+                    },
+                    vinyl =>
+                    {
+                        SetVinylRotation(vinyl);
+                    },
+                    breathing =>
+                    {
+                        SetAudioReactiveBreathing(breathing);
                     });
 
                 settingsWindow.Owner = this;
@@ -446,6 +460,33 @@ namespace DynamicIslandPC
             SaveSettings();
             AnimateToMode();
             Logger.Log($"Target monitor changed to {targetMonitorDeviceName}");
+        }
+
+        private void SetVinylRotation(bool enabled)
+        {
+            vinylRotationEnabled = enabled;
+            _settings.VinylRotationEnabled = enabled;
+            SaveSettings();
+            if (enabled)
+            {
+                if (lastMusicInfo != null && lastMusicInfo.IsPlaying)
+                    StartRotation();
+            }
+            else
+            {
+                StopRotation();
+            }
+        }
+
+        private void SetAudioReactiveBreathing(bool enabled)
+        {
+            audioReactiveBreathingEnabled = enabled;
+            _settings.AudioReactiveBreathingEnabled = enabled;
+            SaveSettings();
+            if (!enabled)
+            {
+                ResetBreathing();
+            }
         }
 
         private void SetExcludeFromCapture(bool exclude)
