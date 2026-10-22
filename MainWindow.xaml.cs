@@ -18,7 +18,15 @@ namespace DynamicIslandPC
         private MusicInfoService musicService;
         private MusicInfo lastMusicInfo = null;
         private bool isPaused = false;
-        private Storyboard rotationStoryboard;
+        private static readonly DoubleAnimation _vinylRotationAnimation = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(12))
+        {
+            RepeatBehavior = RepeatBehavior.Forever
+        };
+        private AnimationClock _vinylClock;
+        private bool _isVinylSpinning = false;
+        private DispatcherTimer _dropPeekTimer;
+        private Storyboard _dropPeekStoryboard;
+        private bool _isPeekingDrop = false;
         private int _slideDirection = -1;
         private Storyboard _pauseInStoryboard;
         private Storyboard _pauseOutStoryboard;
@@ -334,6 +342,15 @@ namespace DynamicIslandPC
 
             _lastModeSwitchAt = now;
 
+            if (_isPeekingDrop)
+            {
+                CancelDropPeek();
+                displayMode = 1;
+                AnimateToMode();
+                SaveSettings();
+                return;
+            }
+
             if (isPaused)
             {
                 isPaused = false;
@@ -363,6 +380,22 @@ namespace DynamicIslandPC
 
         private void EnsureActiveDisplayModeVisible()
         {
+            if (_isPeekingDrop)
+            {
+                PausedMode.Visibility = Visibility.Collapsed;
+                PausedMode.Opacity = 0;
+
+                MinimalMode.Visibility = Visibility.Collapsed;
+                MinimalMode.Opacity = 0;
+
+                ExpandedMode.Visibility = Visibility.Collapsed;
+                ExpandedMode.Opacity = 0;
+
+                CompactMode.Visibility = Visibility.Visible;
+                CompactMode.Opacity = 1;
+                return;
+            }
+
             PausedMode.Visibility = Visibility.Collapsed;
             PausedMode.Opacity = 0;
 
@@ -376,6 +409,7 @@ namespace DynamicIslandPC
 
         private void AnimateToMode()
         {
+            CancelDropPeek();
             _pauseInStoryboard?.Stop();
             _pauseOutStoryboard?.Stop();
             _pauseDebounceTimer?.Stop();
@@ -571,6 +605,11 @@ namespace DynamicIslandPC
             {
                 SlideContent(musicInfo);
                 TrackRevealOverlay.Visibility = Visibility.Collapsed;
+
+                if (displayMode == 0)
+                {
+                    TriggerDropPeekToMedium(musicInfo);
+                }
             }
             else
             {
@@ -635,7 +674,7 @@ namespace DynamicIslandPC
                     isPaused = false;
                     AnimateFromPaused();
                 }
-                else
+                else if (!_isPeekingDrop)
                 {
                     EnsureActiveDisplayModeVisible();
                 }
@@ -652,7 +691,7 @@ namespace DynamicIslandPC
                     isPaused = false;
                     AnimateFromPaused();
                 }
-                else
+                else if (!_isPeekingDrop)
                 {
                     EnsureActiveDisplayModeVisible();
                 }
@@ -694,12 +733,18 @@ namespace DynamicIslandPC
             _ => 35
         };
 
-        private Grid GetDisplayModeGrid() => displayMode switch
+        private Grid GetDisplayModeGrid()
         {
-            0 => MinimalMode,
-            1 => CompactMode,
-            _ => ExpandedMode
-        };
+            if (_isPeekingDrop)
+                return CompactMode;
+
+            return displayMode switch
+            {
+                0 => MinimalMode,
+                1 => CompactMode,
+                _ => ExpandedMode
+            };
+        }
 
         private void ShowDisplayModeWithoutAnimation()
         {
@@ -947,6 +992,7 @@ namespace DynamicIslandPC
 
         private void AnimateToPaused()
         {
+            CancelDropPeek();
             _audioVisualizer?.Stop();
             _modeStoryboard?.Stop();
             _modeStoryboard = null;
@@ -1137,25 +1183,19 @@ namespace DynamicIslandPC
 
         private void PulseAlbumArt()
         {
-            void ApplyPulse(UIElement element)
+            void ApplyPulse(ScaleTransform scale)
             {
-                element.RenderTransformOrigin = new Point(0.5, 0.5);
-                if (element.RenderTransform is not ScaleTransform scale)
-                {
-                    scale = new ScaleTransform(1, 1);
-                    element.RenderTransform = scale;
-                }
-
+                if (scale == null) return;
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
 
                 var pulseX = new DoubleAnimationUsingKeyFrames();
-                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.03, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(180)))
+                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(180)))
                 {
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
                 });
-                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(460)))
+                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(460)))
                 {
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
                 });
@@ -1165,9 +1205,9 @@ namespace DynamicIslandPC
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulseY);
             }
 
-            ApplyPulse(AlbumArtMinimal);
-            ApplyPulse(AlbumArt);
-            ApplyPulse(AlbumArtExpanded);
+            ApplyPulse(AlbumArtMinimalScale);
+            ApplyPulse(AlbumArtScale);
+            ApplyPulse(AlbumArtExpandedScale);
         }
 
         private void SetProgressGlowStrength(double opacity)
@@ -1238,18 +1278,29 @@ namespace DynamicIslandPC
 
         private void StartRotation()
         {
-            // Dynamic Island album covers stay upright and sharp
+            if (_vinylClock == null)
+            {
+                _vinylClock = _vinylRotationAnimation.CreateClock();
+                AlbumArtMinimalRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                AlbumArtRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                AlbumArtExpandedRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                AlbumArtOldRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                AlbumArtExpandedOldRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                _isVinylSpinning = true;
+            }
+            else if (!_isVinylSpinning)
+            {
+                _vinylClock.Controller.Resume();
+                _isVinylSpinning = true;
+            }
         }
-        
+
         private void StopRotation()
         {
-            if (rotationStoryboard != null)
+            if (_vinylClock != null && _isVinylSpinning)
             {
-                rotationStoryboard.Stop();
-                rotationStoryboard = null;
-                AlbumArtMinimalRotation.Angle = 0;
-                AlbumArtRotation.Angle = 0;
-                AlbumArtExpandedRotation.Angle = 0;
+                _vinylClock.Controller.Pause();
+                _isVinylSpinning = false;
             }
         }
 
@@ -1336,10 +1387,308 @@ namespace DynamicIslandPC
                 newLayer.BeginAnimation(OpacityProperty, fadeIn);
             }
 
+            if (AlbumArtOldRotation != null && AlbumArtRotation != null)
+                AlbumArtOldRotation.Angle = AlbumArtRotation.Angle;
+            if (AlbumArtExpandedOldRotation != null && AlbumArtExpandedRotation != null)
+                AlbumArtExpandedOldRotation.Angle = AlbumArtExpandedRotation.Angle;
+
             Slide(CompactContentOld, CompactContentNew, CompactOldTranslate, CompactNewTranslate, compactExitX, compactEnterX);
             Slide(ExpandedContentOld, ExpandedContentNew, ExpandedOldTranslate, ExpandedNewTranslate, expandedExitX, expandedEnterX);
 
             PulseAlbumArt();
+            PulseIslandDropletOnTrackChange();
+        }
+
+        private void PulseIslandDropletOnTrackChange()
+        {
+            if (IslandBorderScale == null) return;
+            IslandBorderScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            IslandBorderScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+
+            var pulseX = new DoubleAnimationUsingKeyFrames();
+            pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.025, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(160)))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+            pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)))
+            {
+                EasingFunction = new BackEase { Amplitude = 0.2, EasingMode = EasingMode.EaseOut }
+            });
+
+            var pulseY = new DoubleAnimationUsingKeyFrames();
+            pulseY.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            pulseY.KeyFrames.Add(new EasingDoubleKeyFrame(0.985, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(140)))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+            pulseY.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)))
+            {
+                EasingFunction = new BackEase { Amplitude = 0.2, EasingMode = EasingMode.EaseOut }
+            });
+
+            IslandBorderScale.BeginAnimation(ScaleTransform.ScaleXProperty, pulseX);
+            IslandBorderScale.BeginAnimation(ScaleTransform.ScaleYProperty, pulseY);
+        }
+
+        private void TriggerDropPeekToMedium(MusicInfo musicInfo = null)
+        {
+            if (isPaused) return;
+
+            if (_dropPeekTimer != null)
+            {
+                _dropPeekTimer.Stop();
+                _dropPeekTimer = null;
+            }
+
+            _dropPeekStoryboard?.Stop();
+            _dropPeekStoryboard = null;
+            _modeStoryboard?.Stop();
+            _modeStoryboard = null;
+
+            _isPeekingDrop = true;
+
+            // Ensure CompactMode contents are populated and visible
+            if (musicInfo != null)
+            {
+                CompactTitle.Text = musicInfo.Title ?? "Неизвестный трек";
+                CompactArtist.Text = musicInfo.Artist ?? "Неизвестный исполнитель";
+                if (musicInfo.AlbumArt != null)
+                    AlbumArt.Source = musicInfo.AlbumArt;
+            }
+
+            CompactContentOld.BeginAnimation(OpacityProperty, null);
+            CompactContentOld.Opacity = 0;
+            CompactContentNew.BeginAnimation(OpacityProperty, null);
+            CompactContentNew.Opacity = 1;
+            CompactNewTranslate.BeginAnimation(TranslateTransform.XProperty, null);
+            CompactNewTranslate.X = 0;
+
+            MinimalMode.BeginAnimation(OpacityProperty, null);
+            MinimalMode.Visibility = Visibility.Collapsed;
+            MinimalMode.Opacity = 0;
+
+            CompactMode.BeginAnimation(OpacityProperty, null);
+            CompactMode.Visibility = Visibility.Visible;
+            CompactMode.Opacity = 1;
+
+            var (baseWidth, baseHeight) = GetModeSize(1);
+            double targetWidth = baseWidth * scale;
+            double targetHeight = baseHeight * scale;
+            var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
+
+            IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(1) * scale);
+
+            var sb = new Storyboard();
+            _dropPeekStoryboard = sb;
+
+            var widthAnim = new DoubleAnimation
+            {
+                To = targetWidth,
+                Duration = TimeSpan.FromMilliseconds(460),
+                EasingFunction = new BackEase { Amplitude = 0.28, EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(widthAnim, this);
+            Storyboard.SetTargetProperty(widthAnim, new PropertyPath("Width"));
+            sb.Children.Add(widthAnim);
+
+            var heightAnim = new DoubleAnimation
+            {
+                To = targetHeight,
+                Duration = TimeSpan.FromMilliseconds(420),
+                EasingFunction = new BackEase { Amplitude = 0.18, EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(heightAnim, this);
+            Storyboard.SetTargetProperty(heightAnim, new PropertyPath("Height"));
+            sb.Children.Add(heightAnim);
+
+            var leftAnim = new DoubleAnimation
+            {
+                To = targetLeft,
+                Duration = TimeSpan.FromMilliseconds(460),
+                EasingFunction = new BackEase { Amplitude = 0.28, EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(leftAnim, this);
+            Storyboard.SetTargetProperty(leftAnim, new PropertyPath("Left"));
+            sb.Children.Add(leftAnim);
+
+            var topAnim = new DoubleAnimation
+            {
+                To = targetTop,
+                Duration = TimeSpan.FromMilliseconds(420),
+                EasingFunction = new BackEase { Amplitude = 0.18, EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(topAnim, this);
+            Storyboard.SetTargetProperty(topAnim, new PropertyPath("Top"));
+            sb.Children.Add(topAnim);
+
+            // Subtle smooth slide-in for the track info layer matching the expanding droplet
+            var contentSlide = new DoubleAnimation
+            {
+                From = 24,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(400),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            CompactNewTranslate.BeginAnimation(TranslateTransform.XProperty, contentSlide);
+
+            sb.Completed += (s, e) =>
+            {
+                Width = targetWidth;
+                Height = targetHeight;
+                Left = targetLeft;
+                Top = targetTop;
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+                BeginAnimation(LeftProperty, null);
+                BeginAnimation(TopProperty, null);
+
+                CompactMode.Visibility = Visibility.Visible;
+                CompactMode.Opacity = 1;
+                MinimalMode.Visibility = Visibility.Collapsed;
+                MinimalMode.Opacity = 0;
+                _dropPeekStoryboard = null;
+                EnsureTopmost();
+
+                _dropPeekTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+                _dropPeekTimer.Tick += (sender, args) =>
+                {
+                    _dropPeekTimer?.Stop();
+                    _dropPeekTimer = null;
+                    CollapseDropPeekToMinimal();
+                };
+                _dropPeekTimer.Start();
+            };
+
+            sb.Begin();
+        }
+
+        private void CollapseDropPeekToMinimal()
+        {
+            if (!_isPeekingDrop || displayMode != 0)
+            {
+                _isPeekingDrop = false;
+                return;
+            }
+
+            _dropPeekStoryboard?.Stop();
+            _dropPeekStoryboard = null;
+            _modeStoryboard?.Stop();
+            _modeStoryboard = null;
+
+            var (baseWidth, baseHeight) = GetModeSize(0);
+            double targetWidth = baseWidth * scale;
+            double targetHeight = baseHeight * scale;
+            var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
+
+            MinimalMode.Visibility = Visibility.Visible;
+            MinimalMode.Opacity = 0;
+
+            var sb = new Storyboard();
+            _dropPeekStoryboard = sb;
+
+            var widthAnim = new DoubleAnimation
+            {
+                To = targetWidth,
+                Duration = TimeSpan.FromMilliseconds(380),
+                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(widthAnim, this);
+            Storyboard.SetTargetProperty(widthAnim, new PropertyPath("Width"));
+            sb.Children.Add(widthAnim);
+
+            var heightAnim = new DoubleAnimation
+            {
+                To = targetHeight,
+                Duration = TimeSpan.FromMilliseconds(350),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(heightAnim, this);
+            Storyboard.SetTargetProperty(heightAnim, new PropertyPath("Height"));
+            sb.Children.Add(heightAnim);
+
+            var leftAnim = new DoubleAnimation
+            {
+                To = targetLeft,
+                Duration = TimeSpan.FromMilliseconds(380),
+                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(leftAnim, this);
+            Storyboard.SetTargetProperty(leftAnim, new PropertyPath("Left"));
+            sb.Children.Add(leftAnim);
+
+            var topAnim = new DoubleAnimation
+            {
+                To = targetTop,
+                Duration = TimeSpan.FromMilliseconds(350),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(topAnim, this);
+            Storyboard.SetTargetProperty(topAnim, new PropertyPath("Top"));
+            sb.Children.Add(topAnim);
+
+            var fadeOutCompact = new DoubleAnimation
+            {
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(180),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(fadeOutCompact, CompactMode);
+            Storyboard.SetTargetProperty(fadeOutCompact, new PropertyPath("Opacity"));
+            sb.Children.Add(fadeOutCompact);
+
+            var fadeInMin = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(220),
+                BeginTime = TimeSpan.FromMilliseconds(120),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(fadeInMin, MinimalMode);
+            Storyboard.SetTargetProperty(fadeInMin, new PropertyPath("Opacity"));
+            sb.Children.Add(fadeInMin);
+
+            IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(0) * scale);
+
+            sb.Completed += (s, e) =>
+            {
+                Width = targetWidth;
+                Height = targetHeight;
+                Left = targetLeft;
+                Top = targetTop;
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+                BeginAnimation(LeftProperty, null);
+                BeginAnimation(TopProperty, null);
+
+                CompactMode.BeginAnimation(OpacityProperty, null);
+                MinimalMode.BeginAnimation(OpacityProperty, null);
+
+                _isPeekingDrop = false;
+                _dropPeekStoryboard = null;
+                EnsureActiveDisplayModeVisible();
+                EnsureTopmost();
+            };
+
+            sb.Begin();
+        }
+
+        private void CancelDropPeek()
+        {
+            if (_dropPeekTimer != null)
+            {
+                _dropPeekTimer.Stop();
+                _dropPeekTimer = null;
+            }
+            if (_dropPeekStoryboard != null)
+            {
+                _dropPeekStoryboard.Stop();
+                _dropPeekStoryboard = null;
+            }
+            _isPeekingDrop = false;
+            CompactMode.BeginAnimation(OpacityProperty, null);
+            MinimalMode.BeginAnimation(OpacityProperty, null);
         }
         
         private const string PlayPathData = "M 5 3 L 16 10 L 5 17 Z";

@@ -97,9 +97,13 @@
     <Grid ClipToBounds="False">
         <!-- Main Island Capsule -->
         <Border x:Name="IslandBorder"
+                RenderTransformOrigin="0.5,0.5"
                 CornerRadius="30"
                 BorderThickness="1"
                 ClipToBounds="False">
+            <Border.RenderTransform>
+                <ScaleTransform x:Name="IslandBorderScale" ScaleX="1" ScaleY="1"/>
+            </Border.RenderTransform>
             <Border.BorderBrush>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                     <GradientStop Color="#2EFFFFFF" Offset="0"/>
@@ -219,11 +223,17 @@
                     <Grid x:Name="PausedMode" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Grid Width="56" Height="56">
                             <Border Width="56" Height="56" CornerRadius="28" Background="#18FFFFFF" BorderBrush="#25FFFFFF" BorderThickness="0.8">
-                                <Image x:Name="AlbumArtPaused" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/>
-                                    </Image.Clip>
-                                </Image>
+                                <Grid Width="46" Height="46" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image x:Name="AlbumArtPaused" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/>
+                                        </Image.Clip>
+                                    </Image>
+                                    <Ellipse Width="42" Height="42" Stroke="#20FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                    <Ellipse Width="34" Height="34" Stroke="#15FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                    <Ellipse Width="8" Height="8" Fill="#0D0D11" Stroke="#55FFFFFF" StrokeThickness="0.9" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                    <Ellipse Width="3" Height="3" Fill="#B8FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                </Grid>
                             </Border>
                             <Border Width="22" Height="22" CornerRadius="11" Background="#D9000000" BorderBrush="#35FFFFFF" BorderThickness="0.8"
                                     HorizontalAlignment="Right" VerticalAlignment="Bottom">
@@ -241,17 +251,29 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Squircle Album Art -->
-                            <Border Grid.Column="0" Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="0.8">
-                                <Image x:Name="AlbumArtMinimal" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,46,46" RadiusX="12" RadiusY="12"/>
-                                    </Image.Clip>
-                                    <Image.RenderTransform>
-                                        <RotateTransform x:Name="AlbumArtMinimalRotation" Angle="0"/>
-                                    </Image.RenderTransform>
-                                </Image>
-                            </Border>
+                            <!-- Vinyl Record Album Art Minimal -->
+                            <Grid Grid.Column="0" Width="46" Height="46" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <Border Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True">
+                                    <Grid>
+                                        <Image x:Name="AlbumArtMinimal" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                            <Image.Clip>
+                                                <RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/>
+                                            </Image.Clip>
+                                            <Image.RenderTransform>
+                                                <TransformGroup>
+                                                    <ScaleTransform x:Name="AlbumArtMinimalScale" ScaleX="1" ScaleY="1"/>
+                                                    <RotateTransform x:Name="AlbumArtMinimalRotation" Angle="0"/>
+                                                </TransformGroup>
+                                            </Image.RenderTransform>
+                                        </Image>
+                                        <Ellipse Width="42" Height="42" Stroke="#20FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                        <Ellipse Width="34" Height="34" Stroke="#15FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                        <Ellipse Width="24" Height="24" Stroke="#10FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                        <Ellipse Width="8" Height="8" Fill="#0D0D11" Stroke="#55FFFFFF" StrokeThickness="0.9" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                        <Ellipse Width="3" Height="3" Fill="#B8FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                    </Grid>
+                                </Border>
+                            </Grid>
 
                             <!-- Right: Waveform Equalizer -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
@@ -303,11 +325,26 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="0.8" Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <Image x:Name="AlbumArtOld" Width="46" Height="46" Stretch="UniformToFill">
-                                        <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="12" RadiusY="12"/></Image.Clip>
-                                    </Image>
-                                </Border>
+                                <Grid Grid.Column="0" Width="46" Height="46" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <Border Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True">
+                                        <Grid>
+                                            <Image x:Name="AlbumArtOld" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/></Image.Clip>
+                                                <Image.RenderTransform>
+                                                    <TransformGroup>
+                                                        <ScaleTransform x:Name="AlbumArtOldScale" ScaleX="1" ScaleY="1"/>
+                                                        <RotateTransform x:Name="AlbumArtOldRotation" Angle="0"/>
+                                                    </TransformGroup>
+                                                </Image.RenderTransform>
+                                            </Image>
+                                            <Ellipse Width="42" Height="42" Stroke="#20FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                            <Ellipse Width="34" Height="34" Stroke="#15FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                            <Ellipse Width="24" Height="24" Stroke="#10FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                            <Ellipse Width="8" Height="8" Fill="#0D0D11" Stroke="#55FFFFFF" StrokeThickness="0.9" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                            <Ellipse Width="3" Height="3" Fill="#B8FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
                                 <StackPanel x:Name="CompactTextOldContainer" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,8,0">
                                     <Grid ClipToBounds="True" HorizontalAlignment="Left">
                                         <TextBlock x:Name="CompactTitleOld" HorizontalAlignment="Left" TextAlignment="Left" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="None">
@@ -326,12 +363,26 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF" BorderBrush="#22FFFFFF" BorderThickness="0.8" Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <Image x:Name="AlbumArt" Width="46" Height="46" Stretch="UniformToFill">
-                                        <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="12" RadiusY="12"/></Image.Clip>
-                                        <Image.RenderTransform><RotateTransform x:Name="AlbumArtRotation" Angle="0"/></Image.RenderTransform>
-                                    </Image>
-                                </Border>
+                                <Grid Grid.Column="0" Width="46" Height="46" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <Border Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True">
+                                        <Grid>
+                                            <Image x:Name="AlbumArt" Width="46" Height="46" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                <Image.Clip><RectangleGeometry Rect="0,0,46,46" RadiusX="23" RadiusY="23"/></Image.Clip>
+                                                <Image.RenderTransform>
+                                                    <TransformGroup>
+                                                        <ScaleTransform x:Name="AlbumArtScale" ScaleX="1" ScaleY="1"/>
+                                                        <RotateTransform x:Name="AlbumArtRotation" Angle="0"/>
+                                                    </TransformGroup>
+                                                </Image.RenderTransform>
+                                            </Image>
+                                            <Ellipse Width="42" Height="42" Stroke="#20FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                            <Ellipse Width="34" Height="34" Stroke="#15FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                            <Ellipse Width="24" Height="24" Stroke="#10FFFFFF" StrokeThickness="0.6" IsHitTestVisible="False"/>
+                                            <Ellipse Width="8" Height="8" Fill="#0D0D11" Stroke="#55FFFFFF" StrokeThickness="0.9" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                            <Ellipse Width="3" Height="3" Fill="#B8FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,8,0">
                                     <Grid ClipToBounds="True" HorizontalAlignment="Left">
                                         <TextBlock x:Name="CompactTitle" Text="Название трека" HorizontalAlignment="Left" TextAlignment="Left" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="None">
@@ -404,11 +455,26 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="60" Height="60" CornerRadius="14" Background="#1EFFFFFF" BorderBrush="#25FFFFFF" BorderThickness="1">
-                                        <Image x:Name="AlbumArtExpandedOld" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="14" RadiusY="14"/></Image.Clip>
-                                        </Image>
-                                    </Border>
+                                    <Grid Grid.Column="0" Width="60" Height="60" VerticalAlignment="Center">
+                                        <Border Width="60" Height="60" CornerRadius="30" Background="#141418" BorderBrush="#30FFFFFF" BorderThickness="1" ClipToBounds="True">
+                                            <Grid>
+                                                <Image x:Name="AlbumArtExpandedOld" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                    <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="30" RadiusY="30"/></Image.Clip>
+                                                    <Image.RenderTransform>
+                                                        <TransformGroup>
+                                                            <ScaleTransform x:Name="AlbumArtExpandedOldScale" ScaleX="1" ScaleY="1"/>
+                                                            <RotateTransform x:Name="AlbumArtExpandedOldRotation" Angle="0"/>
+                                                        </TransformGroup>
+                                                    </Image.RenderTransform>
+                                                </Image>
+                                                <Ellipse Width="54" Height="54" Stroke="#20FFFFFF" StrokeThickness="0.7" IsHitTestVisible="False"/>
+                                                <Ellipse Width="44" Height="44" Stroke="#15FFFFFF" StrokeThickness="0.7" IsHitTestVisible="False"/>
+                                                <Ellipse Width="32" Height="32" Stroke="#10FFFFFF" StrokeThickness="0.7" IsHitTestVisible="False"/>
+                                                <Ellipse Width="10" Height="10" Fill="#0D0D11" Stroke="#55FFFFFF" StrokeThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                                <Ellipse Width="3.5" Height="3.5" Fill="#B8FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
                                     <StackPanel x:Name="ExpandedTextOldContainer" Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
                                         <Grid ClipToBounds="True">
                                             <TextBlock x:Name="TrackTitleOld" Foreground="White" FontSize="14" FontWeight="SemiBold" TextTrimming="None">
@@ -427,15 +493,29 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="60" Height="60" CornerRadius="14" Background="#1EFFFFFF" BorderBrush="#25FFFFFF" BorderThickness="1">
-                                        <Border.Effect>
-                                            <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Color="#000000" Opacity="0.5"/>
-                                        </Border.Effect>
-                                        <Image x:Name="AlbumArtExpanded" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="14" RadiusY="14"/></Image.Clip>
-                                            <Image.RenderTransform><RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/></Image.RenderTransform>
-                                        </Image>
-                                    </Border>
+                                    <Grid Grid.Column="0" Width="60" Height="60" VerticalAlignment="Center">
+                                        <Border Width="60" Height="60" CornerRadius="30" Background="#141418" BorderBrush="#30FFFFFF" BorderThickness="1" ClipToBounds="True">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Color="#000000" Opacity="0.5"/>
+                                            </Border.Effect>
+                                            <Grid>
+                                                <Image x:Name="AlbumArtExpanded" Width="60" Height="60" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                    <Image.Clip><RectangleGeometry Rect="0,0,60,60" RadiusX="30" RadiusY="30"/></Image.Clip>
+                                                    <Image.RenderTransform>
+                                                        <TransformGroup>
+                                                            <ScaleTransform x:Name="AlbumArtExpandedScale" ScaleX="1" ScaleY="1"/>
+                                                            <RotateTransform x:Name="AlbumArtExpandedRotation" Angle="0"/>
+                                                        </TransformGroup>
+                                                    </Image.RenderTransform>
+                                                </Image>
+                                                <Ellipse Width="54" Height="54" Stroke="#20FFFFFF" StrokeThickness="0.7" IsHitTestVisible="False"/>
+                                                <Ellipse Width="44" Height="44" Stroke="#15FFFFFF" StrokeThickness="0.7" IsHitTestVisible="False"/>
+                                                <Ellipse Width="32" Height="32" Stroke="#10FFFFFF" StrokeThickness="0.7" IsHitTestVisible="False"/>
+                                                <Ellipse Width="10" Height="10" Fill="#0D0D11" Stroke="#55FFFFFF" StrokeThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                                <Ellipse Width="3.5" Height="3.5" Fill="#B8FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
                                         <Grid ClipToBounds="True">
                                             <TextBlock x:Name="TrackTitle" Text="Название трека" Foreground="White" FontSize="14" FontWeight="SemiBold" TextTrimming="None">
