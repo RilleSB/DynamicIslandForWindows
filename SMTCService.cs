@@ -87,11 +87,11 @@ namespace DynamicIslandPC
                         return;
                     }
 
-                    // Watchdog heartbeat: ensure we never miss dropped WinRT events
+                    // Watchdog heartbeat: rare fallback in case WinRT events are missed
                     TriggerFetch(0);
                 }
                 catch { }
-            }, null, 1500, 1500);
+            }, null, 4000, 10000);
         }
 
         private void OnSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender, CurrentSessionChangedEventArgs args)
@@ -675,6 +675,57 @@ namespace DynamicIslandPC
                 ratio = Math.Clamp(ratio, 0.0, 1.0);
                 var target = TimeSpan.FromTicks((long)(lastKnownInfo.Duration.Ticks * ratio));
                 return await SeekToPositionAsync(target);
+            }
+            return false;
+        }
+
+        public async Task<bool> TogglePlayPauseAsync()
+        {
+            try
+            {
+                var session = currentSession ?? sessionManager?.GetCurrentSession();
+                if (session != null)
+                {
+                    return await session.TryTogglePlayPauseAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to toggle play/pause on SMTC session", ex);
+            }
+            return false;
+        }
+
+        public async Task<bool> SkipNextAsync()
+        {
+            try
+            {
+                var session = currentSession ?? sessionManager?.GetCurrentSession();
+                if (session != null)
+                {
+                    return await session.TrySkipNextAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to skip next on SMTC session", ex);
+            }
+            return false;
+        }
+
+        public async Task<bool> SkipPreviousAsync()
+        {
+            try
+            {
+                var session = currentSession ?? sessionManager?.GetCurrentSession();
+                if (session != null)
+                {
+                    return await session.TrySkipPreviousAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to skip previous on SMTC session", ex);
             }
             return false;
         }

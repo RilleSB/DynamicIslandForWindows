@@ -52,6 +52,18 @@ namespace DynamicIslandPC
         private bool browserSourceEnabled = true;
         private System.Windows.Forms.ToolStripMenuItem trayTrackItem;
         private System.Windows.Forms.ToolStripMenuItem trayPlayPauseItem;
+        private System.Windows.Forms.ToolStripMenuItem trayPositionTopItem;
+        private System.Windows.Forms.ToolStripMenuItem trayPositionBottomItem;
+        private System.Windows.Forms.ToolStripMenuItem trayPositionCustomItem;
+        private System.Windows.Forms.ToolStripMenuItem trayThemeDarkItem;
+        private System.Windows.Forms.ToolStripMenuItem trayThemeLightItem;
+        private System.Windows.Forms.ToolStripMenuItem trayScale100Item;
+        private System.Windows.Forms.ToolStripMenuItem trayScale125Item;
+        private System.Windows.Forms.ToolStripMenuItem trayScale150Item;
+        private System.Windows.Forms.ToolStripMenuItem trayGamingItem;
+        private System.Windows.Forms.ToolStripMenuItem trayLockItem;
+        private System.Windows.Forms.ToolStripMenuItem trayStartupItem;
+        private System.Windows.Forms.ToolStripMenuItem trayBrowserItem;
         private AppSettings _settings;
         private DispatcherTimer _progressTimer;
         private DispatcherTimer _topmostWatchdogTimer;
@@ -328,7 +340,7 @@ namespace DynamicIslandPC
         {
             _topmostWatchdogTimer = new DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
             {
-                Interval = TimeSpan.FromSeconds(1.5)
+                Interval = TimeSpan.FromSeconds(3.0)
             };
             _topmostWatchdogTimer.Tick += (s, e) => EnsureTopmost();
             _topmostWatchdogTimer.Start();
@@ -706,7 +718,7 @@ namespace DynamicIslandPC
             if (musicInfo.IsPlaying)
             {
                 StartRotation();
-                if (!audioReactiveBreathingEnabled)
+                if (!audioReactiveBreathingEnabled && trackChanged)
                 {
                     PulseAlbumArt();
                 }
@@ -1056,7 +1068,6 @@ namespace DynamicIslandPC
             StopRotation();
             ResetBreathing();
             _audioVisualizer?.Stop();
-            TrimMemory();
             _modeStoryboard?.Stop();
             _modeStoryboard = null;
             _pauseOutStoryboard?.Stop();
@@ -1327,23 +1338,47 @@ namespace DynamicIslandPC
             translate.BeginAnimation(TranslateTransform.XProperty, null);
             translate.X = 0;
 
-            var estimatedWidth = (text?.Length ?? 0) * textBlock.FontSize * 0.58;
-            if (estimatedWidth <= visibleWidth + 18)
+            if (string.IsNullOrWhiteSpace(text))
                 return;
 
-            var shift = Math.Min(estimatedWidth - visibleWidth + 12, visibleWidth * 0.85);
+            double measuredWidth = MeasureStringWidth(textBlock, text);
+            if (measuredWidth <= visibleWidth + 4)
+                return;
+
+            var shift = measuredWidth - visibleWidth + 14;
+            double scrollDuration = Math.Clamp(2400 + shift * 18, 2800, 6500);
+
             storyboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever };
             var animation = new DoubleAnimationUsingKeyFrames();
             animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
             animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100))));
-            animation.KeyFrames.Add(new EasingDoubleKeyFrame(-shift, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(3900))) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } });
-            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(-shift, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(5100))));
-            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(5110))));
+            animation.KeyFrames.Add(new EasingDoubleKeyFrame(-shift, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100 + scrollDuration))) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } });
+            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(-shift, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300 + scrollDuration))));
+            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2310 + scrollDuration))));
 
             Storyboard.SetTarget(animation, translate);
             Storyboard.SetTargetProperty(animation, new PropertyPath(TranslateTransform.XProperty));
             storyboard.Children.Add(animation);
             storyboard.Begin();
+        }
+
+        private static double MeasureStringWidth(TextBlock textBlock, string text)
+        {
+            if (string.IsNullOrEmpty(text) || textBlock == null)
+                return 0;
+
+            var typeface = new Typeface(textBlock.FontFamily, textBlock.FontStyle, textBlock.FontWeight, textBlock.FontStretch);
+            var dpi = VisualTreeHelper.GetDpi(textBlock);
+            var formattedText = new FormattedText(
+                text,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                textBlock.FontSize,
+                Brushes.Black,
+                dpi.PixelsPerDip);
+
+            return formattedText.Width;
         }
 
         private void StartRotation()
@@ -1373,6 +1408,36 @@ namespace DynamicIslandPC
                 _vinylClock.Controller.Pause();
                 _isVinylSpinning = false;
             }
+        }
+
+        private void ResetVinylRotation()
+        {
+            if (_vinylClock != null)
+            {
+                try
+                {
+                    _vinylClock.Controller?.Stop();
+                    _vinylClock.Controller?.Pause();
+                }
+                catch { }
+                _isVinylSpinning = false;
+            }
+
+            void ResetAngle(RotateTransform rt)
+            {
+                if (rt != null)
+                {
+                    rt.ApplyAnimationClock(RotateTransform.AngleProperty, null);
+                    rt.Angle = 0;
+                }
+            }
+
+            ResetAngle(AlbumArtMinimalRotation);
+            ResetAngle(AlbumArtRotation);
+            ResetAngle(AlbumArtExpandedRotation);
+            ResetAngle(AlbumArtOldRotation);
+            ResetAngle(AlbumArtExpandedOldRotation);
+            _vinylClock = null;
         }
 
         private static void StopSlideAnimations(TranslateTransform oldTransform, TranslateTransform newTransform)
@@ -1923,6 +1988,19 @@ namespace DynamicIslandPC
             sourcesMenu.DropDownItems.Add(browserSourceItem);
             contextMenu.Items.Add(sourcesMenu);
 
+            trayPositionTopItem = topItem;
+            trayPositionBottomItem = bottomItem;
+            trayPositionCustomItem = customItem;
+            trayThemeDarkItem = darkItem;
+            trayThemeLightItem = lightItem;
+            trayScale100Item = scale100;
+            trayScale125Item = scale125;
+            trayScale150Item = scale150;
+            trayGamingItem = gamingModeItem;
+            trayLockItem = lockModeItem;
+            trayStartupItem = startupItem;
+            trayBrowserItem = browserSourceItem;
+
             var controllerMenu = new System.Windows.Forms.ToolStripMenuItem("Управление музыкой");
             trayTrackItem = new System.Windows.Forms.ToolStripMenuItem("Нет медиа") { Enabled = false };
             var prevItem = new System.Windows.Forms.ToolStripMenuItem("Предыдущий трек", null, (s, e) => musicService?.PreviousTrack());
@@ -2176,6 +2254,15 @@ namespace DynamicIslandPC
             }
         }
 
+        private void ProgressContainer_LostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (_isScrubbing)
+            {
+                _isScrubbing = false;
+                _activeScrubberContainer = null;
+            }
+        }
+
         private void HandleScrub(Grid container, double mouseX, bool commit = false)
         {
             if (lastMusicInfo == null || lastMusicInfo.Duration <= TimeSpan.Zero) return;
@@ -2200,18 +2287,16 @@ namespace DynamicIslandPC
             }
         }
 
-        [DllImport("psapi.dll")]
-        private static extern int EmptyWorkingSet(IntPtr hwProc);
-
         public static void TrimMemory()
         {
-            try
+            Task.Run(() =>
             {
-                GC.Collect(2, GCCollectionMode.Aggressive, blocking: false, compacting: true);
-                GC.WaitForPendingFinalizers();
-                EmptyWorkingSet(System.Diagnostics.Process.GetCurrentProcess().Handle);
-            }
-            catch { }
+                try
+                {
+                    GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
+                }
+                catch { }
+            });
         }
 
         private double _breathingScale = 1.0;

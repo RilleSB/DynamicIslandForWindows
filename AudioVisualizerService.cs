@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using NAudio.Wave;
 
 namespace DynamicIslandPC
@@ -46,26 +47,38 @@ namespace DynamicIslandPC
 
         public void Start()
         {
-            if (!IsEnabled || isRunning || isDisposed)
+            if (!IsEnabled || isDisposed)
                 return;
 
+            WasapiLoopbackCapture toDispose = null;
             lock (syncRoot)
             {
                 if (isRunning || isDisposed)
                     return;
 
+                if (capture != null)
+                {
+                    capture.DataAvailable -= OnDataAvailable;
+                    toDispose = capture;
+                    capture = null;
+                }
+
                 try
                 {
-                    capture = new WasapiLoopbackCapture();
-                    capture.DataAvailable += OnDataAvailable;
-                    capture.RecordingStopped += (s, e) =>
+                    var newCapture = new WasapiLoopbackCapture();
+                    newCapture.DataAvailable += OnDataAvailable;
+                    newCapture.RecordingStopped += (s, e) =>
                     {
                         lock (syncRoot)
                         {
-                            isRunning = false;
+                            if (object.ReferenceEquals(capture, s))
+                            {
+                                isRunning = false;
+                            }
                         }
                     };
-                    capture.StartRecording();
+                    newCapture.StartRecording();
+                    capture = newCapture;
                     isRunning = true;
                     _lastDataTick = Environment.TickCount64;
                     StartSilenceWatchdog();
@@ -73,13 +86,27 @@ namespace DynamicIslandPC
                 catch (Exception ex)
                 {
                     Logger.Error("Failed to initialize WASAPI loopback audio visualizer", ex);
-                    Stop();
+                    isRunning = false;
                 }
+            }
+
+            if (toDispose != null)
+            {
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        toDispose.StopRecording();
+                        toDispose.Dispose();
+                    }
+                    catch { }
+                });
             }
         }
 
         public void Stop()
         {
+            WasapiLoopbackCapture toDispose = null;
             lock (syncRoot)
             {
                 StopSilenceWatchdog();
@@ -87,22 +114,28 @@ namespace DynamicIslandPC
                 if (!isRunning && capture == null)
                     return;
 
-                try
+                isRunning = false;
+                if (capture != null)
                 {
-                    if (capture != null)
+                    capture.DataAvailable -= OnDataAvailable;
+                    toDispose = capture;
+                    capture = null;
+                }
+                ResetBands();
+            }
+
+            if (toDispose != null)
+            {
+                // Dispose outside of syncRoot lock so captureThread.Join() never deadlocks UI
+                Task.Run(() =>
+                {
+                    try
                     {
-                        capture.DataAvailable -= OnDataAvailable;
-                        capture.StopRecording();
-                        capture.Dispose();
-                        capture = null;
+                        toDispose.StopRecording();
+                        toDispose.Dispose();
                     }
-                }
-                catch { }
-                finally
-                {
-                    isRunning = false;
-                    ResetBands();
-                }
+                    catch { }
+                });
             }
         }
 

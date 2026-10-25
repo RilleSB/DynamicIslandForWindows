@@ -28,7 +28,7 @@ namespace DynamicIslandPC
             {
                 return ver.Build > 0 ? $"V{ver.Major}.{ver.Minor}.{ver.Build}" : $"V{ver.Major}.{ver.Minor}";
             }
-            return "V3.2";
+            return "V3.2.1";
         }
 
         public static async Task<UpdateInfo> CheckAsync()
@@ -116,21 +116,39 @@ namespace DynamicIslandPC
                 }
             }
 
+            var fileInfo = new FileInfo(tempExePath);
+            if (!fileInfo.Exists || fileInfo.Length < 1024 * 1024)
+            {
+                try { if (File.Exists(tempExePath)) File.Delete(tempExePath); } catch { }
+                throw new InvalidOperationException("Downloaded update binary is invalid or incomplete.");
+            }
+
             var pid = Process.GetCurrentProcess().Id;
-            var scriptPath = Path.Combine(Path.GetTempPath(), $"update_island_{Guid.NewGuid():N}.bat");
+            var scriptPath = Path.Combine(Path.GetTempPath(), $"update_island_{Guid.NewGuid():N}.cmd");
 
             var scriptContent = $@"@echo off
+chcp 65001 >nul
+set /a tries=0
+
 :wait
 timeout /t 1 /nobreak >nul
-tasklist /fi ""PID eq {pid}"" | find ""{pid}"" >nul
-if %ERRORLEVEL% equ 0 goto wait
+tasklist /fi ""PID eq {pid}"" | findstr /r ""\<{pid}\>"" >nul
+if %ERRORLEVEL% equ 0 (
+    set /a tries+=1
+    if %tries% lss 15 goto wait
+)
 
 copy /y ""{tempExePath}"" ""{currentExe}"" >nul
-del ""{tempExePath}"" >nul
+if %ERRORLEVEL% neq 0 (
+    timeout /t 1 /nobreak >nul
+    copy /y ""{tempExePath}"" ""{currentExe}"" >nul
+)
+
+if exist ""{tempExePath}"" del /f /q ""{tempExePath}"" >nul
 start """" ""{currentExe}""
-del ""%~f0""
+del ""%~f0"" >nul
 ";
-            File.WriteAllText(scriptPath, scriptContent, System.Text.Encoding.Default);
+            File.WriteAllText(scriptPath, scriptContent, new System.Text.UTF8Encoding(true));
 
             var startInfo = new ProcessStartInfo
             {

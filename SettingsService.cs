@@ -37,10 +37,11 @@ namespace DynamicIslandPC
 
         public static AppSettings Load()
         {
+            AppSettings settings = null;
             try
             {
                 if (File.Exists(_path))
-                    return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_path)) ?? new AppSettings();
+                    settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_path));
             }
             catch (Exception ex)
             {
@@ -51,7 +52,7 @@ namespace DynamicIslandPC
                     if (File.Exists(backup))
                     {
                         Logger.Log("Restoring settings from backup");
-                        return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(backup)) ?? new AppSettings();
+                        settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(backup));
                     }
                 }
                 catch (Exception backupEx)
@@ -59,7 +60,12 @@ namespace DynamicIslandPC
                     Logger.Error("Failed to load settings backup", backupEx);
                 }
             }
-            return new AppSettings();
+
+            settings ??= new AppSettings();
+            if (double.IsNaN(settings.Scale) || settings.Scale < 0.5 || settings.Scale > 3.0)
+                settings.Scale = 1.0;
+
+            return settings;
         }
 
         public static void Save(AppSettings settings)

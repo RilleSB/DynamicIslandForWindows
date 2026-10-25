@@ -114,19 +114,31 @@ namespace DynamicIslandPC
             }
         }
 
-        public void TogglePlayPause()
+        public async void TogglePlayPause()
         {
-            SendMediaKey(VK_MEDIA_PLAY_PAUSE);
+            bool handled = await smtcService.TogglePlayPauseAsync();
+            if (!handled)
+            {
+                SendMediaKey(VK_MEDIA_PLAY_PAUSE);
+            }
         }
 
-        public void NextTrack()
+        public async void NextTrack()
         {
-            SendMediaKey(VK_MEDIA_NEXT_TRACK);
+            bool handled = await smtcService.SkipNextAsync();
+            if (!handled)
+            {
+                SendMediaKey(VK_MEDIA_NEXT_TRACK);
+            }
         }
 
-        public void PreviousTrack()
+        public async void PreviousTrack()
         {
-            SendMediaKey(VK_MEDIA_PREV_TRACK);
+            bool handled = await smtcService.SkipPreviousAsync();
+            if (!handled)
+            {
+                SendMediaKey(VK_MEDIA_PREV_TRACK);
+            }
         }
 
         public Task<bool> SeekToRatioAsync(double ratio)

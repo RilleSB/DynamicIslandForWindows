@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using System.Runtime.InteropServices;
 
 namespace DynamicIslandPC
@@ -23,7 +24,7 @@ namespace DynamicIslandPC
 
         private void ApplySettings(AppSettings s)
         {
-            scale = s.Scale;
+            scale = (double.IsNaN(s.Scale) || s.Scale < 0.5 || s.Scale > 3.0) ? 1.0 : s.Scale;
             displayMode = Math.Clamp(s.DisplayMode, 0, 2);
             isTopPosition = s.IsTopPosition;
             hasCustomPosition = s.HasCustomPosition || (s.CustomX >= 0 && s.CustomY >= 0);
@@ -72,6 +73,23 @@ namespace DynamicIslandPC
             _settings.VinylRotationEnabled = vinylRotationEnabled;
             _settings.AudioReactiveBreathingEnabled = audioReactiveBreathingEnabled;
             SettingsService.Save(_settings);
+        }
+
+        private DispatcherTimer _saveSettingsDebounceTimer;
+
+        private void DebounceSaveSettings()
+        {
+            if (_saveSettingsDebounceTimer == null)
+            {
+                _saveSettingsDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+                _saveSettingsDebounceTimer.Tick += (s, e) =>
+                {
+                    _saveSettingsDebounceTimer.Stop();
+                    SaveSettings();
+                };
+            }
+            _saveSettingsDebounceTimer.Stop();
+            _saveSettingsDebounceTimer.Start();
         }
 
         private double GetEffectiveBackgroundOpacity()
@@ -310,8 +328,10 @@ namespace DynamicIslandPC
                         hasCustomPosition = true;
                         customX = x;
                         customY = y;
-                        AnimateToMode();
-                        SaveSettings();
+                        var (targetLeft, targetTop) = CalculateWindowPosition(Width, Height);
+                        Left = targetLeft;
+                        Top = targetTop;
+                        DebounceSaveSettings();
                     },
                     dark =>
                     {
@@ -355,6 +375,11 @@ namespace DynamicIslandPC
 
                 settingsWindow.Owner = this;
                 settingsWindow.ShowDialog();
+                if (_saveSettingsDebounceTimer?.IsEnabled == true)
+                {
+                    _saveSettingsDebounceTimer.Stop();
+                    SaveSettings();
+                }
             }
             catch (Exception ex)
             {
@@ -474,7 +499,7 @@ namespace DynamicIslandPC
             }
             else
             {
-                StopRotation();
+                ResetVinylRotation();
             }
         }
 
@@ -687,47 +712,36 @@ namespace DynamicIslandPC
             if (trayIcon?.ContextMenuStrip == null)
                 return;
 
-            if (trayIcon.ContextMenuStrip.Items[0] is ToolStripMenuItem positionMenu)
-            {
-                ((ToolStripMenuItem)positionMenu.DropDownItems[0]).Checked = isTopPosition && !hasCustomPosition;
-                ((ToolStripMenuItem)positionMenu.DropDownItems[1]).Checked = !isTopPosition && !hasCustomPosition;
-                ((ToolStripMenuItem)positionMenu.DropDownItems[2]).Checked = hasCustomPosition;
-            }
+            if (trayPositionTopItem != null)
+                trayPositionTopItem.Checked = isTopPosition && !hasCustomPosition;
+            if (trayPositionBottomItem != null)
+                trayPositionBottomItem.Checked = !isTopPosition && !hasCustomPosition;
+            if (trayPositionCustomItem != null)
+                trayPositionCustomItem.Checked = hasCustomPosition;
 
-            if (trayIcon.ContextMenuStrip.Items[1] is ToolStripMenuItem themeMenu)
-            {
-                ((ToolStripMenuItem)themeMenu.DropDownItems[0]).Checked = isDarkTheme;
-                ((ToolStripMenuItem)themeMenu.DropDownItems[1]).Checked = !isDarkTheme;
-            }
+            if (trayThemeDarkItem != null)
+                trayThemeDarkItem.Checked = isDarkTheme;
+            if (trayThemeLightItem != null)
+                trayThemeLightItem.Checked = !isDarkTheme;
 
-            if (trayIcon.ContextMenuStrip.Items[2] is ToolStripMenuItem scaleMenu)
-            {
-                for (int i = 0; i < scaleMenu.DropDownItems.Count; i++)
-                    ((ToolStripMenuItem)scaleMenu.DropDownItems[i]).Checked = false;
+            if (trayScale100Item != null)
+                trayScale100Item.Checked = Math.Abs(scale - 1.0) < 0.01;
+            if (trayScale125Item != null)
+                trayScale125Item.Checked = Math.Abs(scale - 1.25) < 0.01;
+            if (trayScale150Item != null)
+                trayScale150Item.Checked = Math.Abs(scale - 1.5) < 0.01;
 
-                if (Math.Abs(scale - 1.0) < 0.01)
-                    ((ToolStripMenuItem)scaleMenu.DropDownItems[0]).Checked = true;
-                else if (Math.Abs(scale - 1.25) < 0.01)
-                    ((ToolStripMenuItem)scaleMenu.DropDownItems[1]).Checked = true;
-                else if (Math.Abs(scale - 1.5) < 0.01)
-                    ((ToolStripMenuItem)scaleMenu.DropDownItems[2]).Checked = true;
-            }
+            if (trayGamingItem != null)
+                trayGamingItem.Checked = gamingModeEnabled;
 
-            if (trayIcon.ContextMenuStrip.Items[3] is ToolStripMenuItem gamingItem)
-                gamingItem.Checked = gamingModeEnabled;
+            if (trayLockItem != null)
+                trayLockItem.Checked = lockModeEnabled;
 
-            if (trayIcon.ContextMenuStrip.Items[4] is ToolStripMenuItem lockItem)
-                lockItem.Checked = lockModeEnabled;
+            if (trayStartupItem != null)
+                trayStartupItem.Checked = startWithWindowsEnabled;
 
-            if (trayIcon.ContextMenuStrip.Items[5] is ToolStripMenuItem startupItem)
-                startupItem.Checked = startWithWindowsEnabled;
-
-            if (trayIcon.ContextMenuStrip.Items[6] is ToolStripMenuItem sourcesMenu &&
-                sourcesMenu.DropDownItems.Count > 0 &&
-                sourcesMenu.DropDownItems[0] is ToolStripMenuItem browserItem)
-            {
-                browserItem.Checked = browserSourceEnabled;
-            }
+            if (trayBrowserItem != null)
+                trayBrowserItem.Checked = browserSourceEnabled;
         }
 
         private void UpdateTrayController(MusicInfo musicInfo)

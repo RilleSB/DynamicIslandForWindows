@@ -1,5 +1,8 @@
+using System;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace DynamicIslandPC
 {
@@ -10,6 +13,7 @@ namespace DynamicIslandPC
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            SetupGlobalExceptionHandling();
             RefreshRateHelper.InitializeHighRefreshRate();
             base.OnStartup(e);
 
@@ -21,6 +25,33 @@ namespace DynamicIslandPC
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 Shutdown();
             }
+        }
+
+        private void SetupGlobalExceptionHandling()
+        {
+            DispatcherUnhandledException += (s, e) =>
+            {
+                Logger.Error("Unhandled Dispatcher Exception", e.Exception);
+                e.Handled = true;
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                if (e.ExceptionObject is Exception ex)
+                {
+                    Logger.Error("Unhandled AppDomain Exception", ex);
+                }
+                else
+                {
+                    Logger.Error($"Unhandled AppDomain non-exception: {e.ExceptionObject}");
+                }
+            };
+
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                Logger.Error("Unobserved Task Exception", e.Exception);
+                e.SetObserved();
+            };
         }
 
         protected override void OnExit(ExitEventArgs e)

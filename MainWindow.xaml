@@ -577,7 +577,8 @@
                                       Background="Transparent" Cursor="Hand"
                                       PreviewMouseLeftButtonDown="ProgressContainer_MouseDown"
                                       PreviewMouseMove="ProgressContainer_MouseMove"
-                                      PreviewMouseLeftButtonUp="ProgressContainer_MouseUp">
+                                      PreviewMouseLeftButtonUp="ProgressContainer_MouseUp"
+                                      LostMouseCapture="ProgressContainer_LostMouseCapture">
                                     <Rectangle x:Name="ProgressTrackExpanded" Height="3" Fill="#20FFFFFF" RadiusX="1.5" RadiusY="1.5" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                                     <Rectangle x:Name="ProgressBarExpanded" Height="3" Fill="#FFFFFF" RadiusX="1.5" RadiusY="1.5" HorizontalAlignment="Left" Width="0" VerticalAlignment="Center">
                                         <Rectangle.Effect>
