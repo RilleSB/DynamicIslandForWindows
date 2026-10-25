@@ -21,6 +21,9 @@ namespace DynamicIslandPC
         private bool excludeFromCapture = false;
         private bool vinylRotationEnabled = true;
         private bool audioReactiveBreathingEnabled = true;
+        private bool fluidPhysicsEnabled = false;
+        private bool vinylScratchEnabled = true;
+        private int visualizerSkin = 0;
 
         private void ApplySettings(AppSettings s)
         {
@@ -45,8 +48,12 @@ namespace DynamicIslandPC
             excludeFromCapture = s.ExcludeFromCapture;
             vinylRotationEnabled = s.VinylRotationEnabled;
             audioReactiveBreathingEnabled = s.AudioReactiveBreathingEnabled;
+            fluidPhysicsEnabled = s.FluidPhysicsEnabled;
+            vinylScratchEnabled = s.VinylScratchEnabled;
+            visualizerSkin = Math.Clamp(s.VisualizerSkin, 0, 3);
             ApplyLiquidGlassStyle(liquidGlassEnabled);
             ApplyDisplayAffinity(excludeFromCapture);
+            ApplyVisualizerSkin(visualizerSkin);
         }
 
         private void SaveSettings()
@@ -72,6 +79,9 @@ namespace DynamicIslandPC
             _settings.ExcludeFromCapture = excludeFromCapture;
             _settings.VinylRotationEnabled = vinylRotationEnabled;
             _settings.AudioReactiveBreathingEnabled = audioReactiveBreathingEnabled;
+            _settings.FluidPhysicsEnabled = fluidPhysicsEnabled;
+            _settings.VinylScratchEnabled = vinylScratchEnabled;
+            _settings.VisualizerSkin = visualizerSkin;
             SettingsService.Save(_settings);
         }
 
@@ -371,6 +381,18 @@ namespace DynamicIslandPC
                     breathing =>
                     {
                         SetAudioReactiveBreathing(breathing);
+                    },
+                    fluid =>
+                    {
+                        SetFluidPhysics(fluid);
+                    },
+                    vinylScratch =>
+                    {
+                        SetVinylScratch(vinylScratch);
+                    },
+                    skin =>
+                    {
+                        SetVisualizerSkin(skin);
                     });
 
                 settingsWindow.Owner = this;
@@ -520,6 +542,31 @@ namespace DynamicIslandPC
             ApplyDisplayAffinity(exclude);
             SaveSettings();
             Logger.Log($"Exclude from capture set to {excludeFromCapture}");
+        }
+
+        private void SetFluidPhysics(bool enabled)
+        {
+            fluidPhysicsEnabled = enabled;
+            _settings.FluidPhysicsEnabled = enabled;
+            SaveSettings();
+            Logger.Log($"Fluid physics animation set to {fluidPhysicsEnabled}");
+        }
+
+        private void SetVinylScratch(bool enabled)
+        {
+            vinylScratchEnabled = enabled;
+            _settings.VinylScratchEnabled = enabled;
+            SaveSettings();
+            Logger.Log($"Vinyl scratch seek set to {vinylScratchEnabled}");
+        }
+
+        private void SetVisualizerSkin(int skin)
+        {
+            visualizerSkin = Math.Clamp(skin, 0, 3);
+            _settings.VisualizerSkin = visualizerSkin;
+            ApplyVisualizerSkin(visualizerSkin);
+            SaveSettings();
+            Logger.Log($"Visualizer skin set to {visualizerSkin}");
         }
 
         private void ApplyDisplayAffinity(bool exclude)

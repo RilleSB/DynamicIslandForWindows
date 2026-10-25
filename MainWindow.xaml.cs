@@ -75,6 +75,17 @@ namespace DynamicIslandPC
         private volatile bool _musicInfoUpdatePending = false;
         private bool _isScrubbing = false;
         private Grid _activeScrubberContainer = null;
+        private bool _isScratchingVinyl = false;
+        private FrameworkElement _activeScratchContainer = null;
+        private Point _scratchCenter;
+        private Vector _lastScratchVector;
+        private double _accumulatedAngleDelta = 0;
+        private double _scratchDragTraveled = 0;
+        private TimeSpan _scratchBasePosition = TimeSpan.Zero;
+        private TimeSpan _scratchCurrentPosition = TimeSpan.Zero;
+        private double _scratchBaseVinylAngle = 0;
+        private double _currentVinylManualAngle = 0;
+        private bool _scratchWasPlaying = false;
         private DateTime _lastProgressTickTime = DateTime.UtcNow;
         private DateTime _lastSeekTime = DateTime.MinValue;
         private Point _dragStartPoint;
@@ -517,6 +528,13 @@ namespace DynamicIslandPC
                     Duration = TimeSpan.FromMilliseconds(160),
                     EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
                 };
+                fadeOut.Completed += (s, e) =>
+                {
+                    if (currentMode != targetMode)
+                    {
+                        currentMode.Visibility = Visibility.Collapsed;
+                    }
+                };
                 Storyboard.SetTarget(fadeOut, currentMode);
                 Storyboard.SetTargetProperty(fadeOut, new PropertyPath("Opacity"));
                 storyboard.Children.Add(fadeOut);
@@ -538,11 +556,15 @@ namespace DynamicIslandPC
                 EnsureActiveDisplayModeVisible();
             }
             
+            bool isExpanding = targetWidth > currentWidth || targetHeight > currentHeight;
+            var (hEase, vEase, animDuration) = GetWindowTransitionEasing(450, isExpanding);
+
             var widthAnimation = new DoubleAnimation
             {
+                From = currentWidth,
                 To = targetWidth,
-                Duration = TimeSpan.FromMilliseconds(450),
-                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut }
+                Duration = animDuration,
+                EasingFunction = hEase
             };
             Storyboard.SetTarget(widthAnimation, this);
             Storyboard.SetTargetProperty(widthAnimation, new PropertyPath("Width"));
@@ -550,9 +572,10 @@ namespace DynamicIslandPC
             
             var heightAnimation = new DoubleAnimation
             {
+                From = currentHeight,
                 To = targetHeight,
-                Duration = TimeSpan.FromMilliseconds(450),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+                Duration = animDuration,
+                EasingFunction = vEase
             };
             Storyboard.SetTarget(heightAnimation, this);
             Storyboard.SetTargetProperty(heightAnimation, new PropertyPath("Height"));
@@ -560,9 +583,10 @@ namespace DynamicIslandPC
             
             var leftAnimation = new DoubleAnimation
             {
+                From = currentLeft,
                 To = targetLeft,
-                Duration = TimeSpan.FromMilliseconds(450),
-                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut }
+                Duration = animDuration,
+                EasingFunction = hEase
             };
             Storyboard.SetTarget(leftAnimation, this);
             Storyboard.SetTargetProperty(leftAnimation, new PropertyPath("Left"));
@@ -570,9 +594,10 @@ namespace DynamicIslandPC
             
             var topAnimation = new DoubleAnimation
             {
+                From = currentTop,
                 To = targetTop,
-                Duration = TimeSpan.FromMilliseconds(450),
-                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut }
+                Duration = animDuration,
+                EasingFunction = vEase
             };
             Storyboard.SetTarget(topAnimation, this);
             Storyboard.SetTargetProperty(topAnimation, new PropertyPath("Top"));
@@ -580,14 +605,14 @@ namespace DynamicIslandPC
             
             storyboard.Completed += (s, e) =>
             {
-                Left = targetLeft;
-                Top = targetTop;
-                Width = targetWidth;
-                Height = targetHeight;
                 BeginAnimation(LeftProperty, null);
                 BeginAnimation(TopProperty, null);
                 BeginAnimation(WidthProperty, null);
                 BeginAnimation(HeightProperty, null);
+                Left = targetLeft;
+                Top = targetTop;
+                Width = targetWidth;
+                Height = targetHeight;
 
                 EnsureActiveDisplayModeVisible();
                 _modeStoryboard = null;
@@ -601,13 +626,47 @@ namespace DynamicIslandPC
             storyboard.Begin();
         }
 
+        private (IEasingFunction horizontalEase, IEasingFunction verticalEase, TimeSpan duration) GetWindowTransitionEasing(int standardDurationMs, bool isExpanding)
+        {
+            if (fluidPhysicsEnabled)
+            {
+                if (isExpanding)
+                {
+                    return (
+                        new BackEase { Amplitude = 0.35, EasingMode = EasingMode.EaseOut },
+                        new BackEase { Amplitude = 0.25, EasingMode = EasingMode.EaseOut },
+                        TimeSpan.FromMilliseconds(standardDurationMs + 40)
+                    );
+                }
+                else
+                {
+                    // Controlled smooth deceleration on contraction without crashing below target bounds
+                    return (
+                        new QuarticEase { EasingMode = EasingMode.EaseOut },
+                        new CubicEase { EasingMode = EasingMode.EaseOut },
+                        TimeSpan.FromMilliseconds(standardDurationMs)
+                    );
+                }
+            }
+
+            return (
+                new QuarticEase { EasingMode = EasingMode.EaseInOut },
+                new CubicEase { EasingMode = EasingMode.EaseInOut },
+                TimeSpan.FromMilliseconds(standardDurationMs)
+            );
+        }
+
         private void ResetModeAnimationState(Grid currentMode)
         {
             MinimalMode.BeginAnimation(OpacityProperty, null);
             CompactMode.BeginAnimation(OpacityProperty, null);
             ExpandedMode.BeginAnimation(OpacityProperty, null);
-            PausedMode.BeginAnimation(OpacityProperty, null);
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(LeftProperty, null);
+            BeginAnimation(TopProperty, null);
 
+            PausedMode.BeginAnimation(OpacityProperty, null);
             PausedMode.Opacity = 0;
             PausedMode.Visibility = Visibility.Collapsed;
 
@@ -710,10 +769,7 @@ namespace DynamicIslandPC
             UpdateSmartVisibility(musicInfo, trackChanged);
             
             UpdateDecorationVisibility(musicInfo.IsPlaying);
-            var gifVisible = musicInfo.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
-            PlaybackIndicatorMinimal.Visibility = gifVisible;
-            PlaybackIndicatorCompact.Visibility = gifVisible;
-            PlaybackIndicatorExpanded.Visibility = gifVisible;
+            UpdateIndicatorsVisibility(musicInfo.IsPlaying);
 
             if (musicInfo.IsPlaying)
             {
@@ -731,6 +787,7 @@ namespace DynamicIslandPC
                 ResetBreathing();
                 SetProgressGlowStrength(0.45);
                 _audioVisualizer?.Stop();
+                SetHaloOpacity(0);
             }
 
             UpdatePlayPauseIcon(musicInfo.IsPlaying);
@@ -761,7 +818,10 @@ namespace DynamicIslandPC
                 if (isPaused)
                 {
                     isPaused = false;
-                    AnimateFromPaused();
+                    if (!_isPeekingDrop)
+                    {
+                        AnimateFromPaused();
+                    }
                 }
                 else if (!_isPeekingDrop)
                 {
@@ -1120,22 +1180,27 @@ namespace DynamicIslandPC
                 _pauseInStoryboard.Children.Add(fadeIn);
 
                 IslandBorder.CornerRadius = new CornerRadius(30 * scale);
-                var w = new DoubleAnimation { To = pausedSize, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                double currentLeft = Left;
+                double currentTop = Top;
+                double currentWidth = Width;
+                double currentHeight = Height;
+                var (hEase, vEase, animDuration) = GetWindowTransitionEasing(380, isExpanding: false);
+                var w = new DoubleAnimation { From = currentWidth, To = pausedSize, Duration = animDuration, EasingFunction = hEase };
                 Storyboard.SetTarget(w, this);
                 Storyboard.SetTargetProperty(w, new PropertyPath("Width"));
                 _pauseInStoryboard.Children.Add(w);
 
-                var h = new DoubleAnimation { To = pausedSize, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var h = new DoubleAnimation { From = currentHeight, To = pausedSize, Duration = animDuration, EasingFunction = vEase };
                 Storyboard.SetTarget(h, this);
                 Storyboard.SetTargetProperty(h, new PropertyPath("Height"));
                 _pauseInStoryboard.Children.Add(h);
 
-                var l = new DoubleAnimation { To = targetLeft, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var l = new DoubleAnimation { From = currentLeft, To = targetLeft, Duration = animDuration, EasingFunction = hEase };
                 Storyboard.SetTarget(l, this);
                 Storyboard.SetTargetProperty(l, new PropertyPath("Left"));
                 _pauseInStoryboard.Children.Add(l);
 
-                var t = new DoubleAnimation { To = targetTop, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var t = new DoubleAnimation { From = currentTop, To = targetTop, Duration = animDuration, EasingFunction = vEase };
                 Storyboard.SetTarget(t, this);
                 Storyboard.SetTargetProperty(t, new PropertyPath("Top"));
                 _pauseInStoryboard.Children.Add(t);
@@ -1183,22 +1248,27 @@ namespace DynamicIslandPC
                 Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
                 sb.Children.Add(fadeIn);
 
-                var w = new DoubleAnimation { To = tw, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                double currentLeft = Left;
+                double currentTop = Top;
+                double currentWidth = Width;
+                double currentHeight = Height;
+                var (unpauseHEase, unpauseVEase, unpauseDuration) = GetWindowTransitionEasing(380, isExpanding: true);
+                var w = new DoubleAnimation { From = currentWidth, To = tw, Duration = unpauseDuration, EasingFunction = unpauseHEase };
                 Storyboard.SetTarget(w, this);
                 Storyboard.SetTargetProperty(w, new PropertyPath("Width"));
                 sb.Children.Add(w);
 
-                var h = new DoubleAnimation { To = th, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var h = new DoubleAnimation { From = currentHeight, To = th, Duration = unpauseDuration, EasingFunction = unpauseVEase };
                 Storyboard.SetTarget(h, this);
                 Storyboard.SetTargetProperty(h, new PropertyPath("Height"));
                 sb.Children.Add(h);
 
-                var l = new DoubleAnimation { To = targetLeft, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var l = new DoubleAnimation { From = currentLeft, To = targetLeft, Duration = unpauseDuration, EasingFunction = unpauseHEase };
                 Storyboard.SetTarget(l, this);
                 Storyboard.SetTargetProperty(l, new PropertyPath("Left"));
                 sb.Children.Add(l);
 
-                var t = new DoubleAnimation { To = targetTop, Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseInOut } };
+                var t = new DoubleAnimation { From = currentTop, To = targetTop, Duration = unpauseDuration, EasingFunction = unpauseVEase };
                 Storyboard.SetTarget(t, this);
                 Storyboard.SetTargetProperty(t, new PropertyPath("Top"));
                 sb.Children.Add(t);
@@ -1381,9 +1451,28 @@ namespace DynamicIslandPC
             return formattedText.Width;
         }
 
-        private void StartRotation()
+        private void StartRotation(double fromAngle = double.NaN)
         {
             if (!vinylRotationEnabled) return;
+
+            if (!double.IsNaN(fromAngle))
+            {
+                double normalized = fromAngle % 360.0;
+                if (normalized < 0) normalized += 360.0;
+                var anim = new DoubleAnimation(normalized, normalized + 360.0, TimeSpan.FromSeconds(12))
+                {
+                    RepeatBehavior = RepeatBehavior.Forever
+                };
+                _vinylClock = anim.CreateClock();
+                AlbumArtMinimalRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                AlbumArtRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                AlbumArtExpandedRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                AlbumArtOldRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                AlbumArtExpandedOldRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
+                _isVinylSpinning = true;
+                return;
+            }
+
             if (_vinylClock == null)
             {
                 _vinylClock = _vinylRotationAnimation.CreateClock();
@@ -1459,8 +1548,11 @@ namespace DynamicIslandPC
         
         private void SlideContent(MusicInfo info)
         {
-            var enterDur = TimeSpan.FromMilliseconds(460);
+            var enterDur = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromMilliseconds(460);
             var exitDur = TimeSpan.FromMilliseconds(340);
+            var enterEase = fluidPhysicsEnabled
+                ? (IEasingFunction)new BackEase { Amplitude = 0.55, EasingMode = EasingMode.EaseOut }
+                : (IEasingFunction)new CubicEase { EasingMode = EasingMode.EaseOut };
             var smoothEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
             var dir = _slideDirection == 0 ? -1 : _slideDirection;
@@ -1506,7 +1598,7 @@ namespace DynamicIslandPC
                 var fadeOut = new DoubleAnimation(1, 0, exitDur) { EasingFunction = smoothEase };
 
                 // Новый трек плавно вплывает на место
-                var enterAnim = new DoubleAnimation(enterX, 0, enterDur) { EasingFunction = smoothEase };
+                var enterAnim = new DoubleAnimation(enterX, 0, enterDur) { EasingFunction = enterEase };
                 var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(380)) { EasingFunction = smoothEase };
 
                 enterAnim.Completed += (_, __) =>
@@ -1534,8 +1626,9 @@ namespace DynamicIslandPC
             if (!audioReactiveBreathingEnabled)
             {
                 PulseAlbumArt();
-                PulseIslandDropletOnTrackChange();
             }
+
+            PulseIslandDropletOnTrackChange();
         }
 
         private void PulseIslandDropletOnTrackChange()
@@ -1544,26 +1637,32 @@ namespace DynamicIslandPC
             IslandBorderScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
             IslandBorderScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
 
+            var targetScaleX = fluidPhysicsEnabled ? 0.965 : 0.980;
+            var targetScaleY = fluidPhysicsEnabled ? 0.975 : 0.985;
+            var dipTime = TimeSpan.FromMilliseconds(fluidPhysicsEnabled ? 130 : 120);
+            var totalTime = TimeSpan.FromMilliseconds(fluidPhysicsEnabled ? 450 : 380);
+            var returnEase = new CubicEase { EasingMode = EasingMode.EaseOut };
+
             var pulseX = new DoubleAnimationUsingKeyFrames();
             pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.025, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(160)))
+            pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(targetScaleX, KeyTime.FromTimeSpan(dipTime))
             {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
             });
-            pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)))
+            pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(totalTime))
             {
-                EasingFunction = new BackEase { Amplitude = 0.2, EasingMode = EasingMode.EaseOut }
+                EasingFunction = returnEase
             });
 
             var pulseY = new DoubleAnimationUsingKeyFrames();
             pulseY.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            pulseY.KeyFrames.Add(new EasingDoubleKeyFrame(0.985, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(140)))
+            pulseY.KeyFrames.Add(new EasingDoubleKeyFrame(targetScaleY, KeyTime.FromTimeSpan(dipTime))
             {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
             });
-            pulseY.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)))
+            pulseY.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(totalTime))
             {
-                EasingFunction = new BackEase { Amplitude = 0.2, EasingMode = EasingMode.EaseOut }
+                EasingFunction = returnEase
             });
 
             pulseX.Completed += (s, e) =>
@@ -1580,7 +1679,13 @@ namespace DynamicIslandPC
 
         private void TriggerDropPeekToMedium(MusicInfo musicInfo = null)
         {
-            if (isPaused) return;
+            if (isPaused)
+            {
+                isPaused = false;
+                _pauseInStoryboard?.Stop();
+                PausedMode.Visibility = Visibility.Collapsed;
+                PausedMode.Opacity = 0;
+            }
 
             if (_dropPeekTimer != null)
             {
@@ -1624,16 +1729,27 @@ namespace DynamicIslandPC
             double targetHeight = baseHeight * scale;
             var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
 
+            double currentLeft = Left;
+            double currentTop = Top;
+            double currentWidth = Width;
+            double currentHeight = Height;
+
             IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(1) * scale);
 
             var sb = new Storyboard();
             _dropPeekStoryboard = sb;
 
+            var peekAmplitudeW = fluidPhysicsEnabled ? 0.75 : 0.28;
+            var peekAmplitudeH = fluidPhysicsEnabled ? 0.45 : 0.18;
+            var peekDurationW = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(520) : TimeSpan.FromMilliseconds(460);
+            var peekDurationH = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(460) : TimeSpan.FromMilliseconds(420);
+
             var widthAnim = new DoubleAnimation
             {
+                From = currentWidth,
                 To = targetWidth,
-                Duration = TimeSpan.FromMilliseconds(460),
-                EasingFunction = new BackEase { Amplitude = 0.28, EasingMode = EasingMode.EaseOut }
+                Duration = peekDurationW,
+                EasingFunction = new BackEase { Amplitude = peekAmplitudeW, EasingMode = EasingMode.EaseOut }
             };
             Storyboard.SetTarget(widthAnim, this);
             Storyboard.SetTargetProperty(widthAnim, new PropertyPath("Width"));
@@ -1641,9 +1757,10 @@ namespace DynamicIslandPC
 
             var heightAnim = new DoubleAnimation
             {
+                From = currentHeight,
                 To = targetHeight,
-                Duration = TimeSpan.FromMilliseconds(420),
-                EasingFunction = new BackEase { Amplitude = 0.18, EasingMode = EasingMode.EaseOut }
+                Duration = peekDurationH,
+                EasingFunction = new BackEase { Amplitude = peekAmplitudeH, EasingMode = EasingMode.EaseOut }
             };
             Storyboard.SetTarget(heightAnim, this);
             Storyboard.SetTargetProperty(heightAnim, new PropertyPath("Height"));
@@ -1651,9 +1768,10 @@ namespace DynamicIslandPC
 
             var leftAnim = new DoubleAnimation
             {
+                From = currentLeft,
                 To = targetLeft,
-                Duration = TimeSpan.FromMilliseconds(460),
-                EasingFunction = new BackEase { Amplitude = 0.28, EasingMode = EasingMode.EaseOut }
+                Duration = peekDurationW,
+                EasingFunction = new BackEase { Amplitude = peekAmplitudeW, EasingMode = EasingMode.EaseOut }
             };
             Storyboard.SetTarget(leftAnim, this);
             Storyboard.SetTargetProperty(leftAnim, new PropertyPath("Left"));
@@ -1661,9 +1779,10 @@ namespace DynamicIslandPC
 
             var topAnim = new DoubleAnimation
             {
+                From = currentTop,
                 To = targetTop,
-                Duration = TimeSpan.FromMilliseconds(420),
-                EasingFunction = new BackEase { Amplitude = 0.18, EasingMode = EasingMode.EaseOut }
+                Duration = peekDurationH,
+                EasingFunction = new BackEase { Amplitude = peekAmplitudeH, EasingMode = EasingMode.EaseOut }
             };
             Storyboard.SetTarget(topAnim, this);
             Storyboard.SetTargetProperty(topAnim, new PropertyPath("Top"));
@@ -1697,7 +1816,7 @@ namespace DynamicIslandPC
                 _dropPeekStoryboard = null;
                 EnsureTopmost();
 
-                _dropPeekTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+                _dropPeekTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2800) };
                 _dropPeekTimer.Tick += (sender, args) =>
                 {
                     _dropPeekTimer?.Stop();
@@ -1728,17 +1847,28 @@ namespace DynamicIslandPC
             double targetHeight = baseHeight * scale;
             var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
 
+            double currentLeft = Left;
+            double currentTop = Top;
+            double currentWidth = Width;
+            double currentHeight = Height;
+
             MinimalMode.Visibility = Visibility.Visible;
             MinimalMode.Opacity = 0;
 
             var sb = new Storyboard();
             _dropPeekStoryboard = sb;
 
+            var returnDurationW = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(440) : TimeSpan.FromMilliseconds(380);
+            var returnDurationH = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(400) : TimeSpan.FromMilliseconds(350);
+
             var widthAnim = new DoubleAnimation
             {
+                From = currentWidth,
                 To = targetWidth,
-                Duration = TimeSpan.FromMilliseconds(380),
-                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+                Duration = returnDurationW,
+                EasingFunction = fluidPhysicsEnabled
+                    ? new BackEase { Amplitude = 0.55, EasingMode = EasingMode.EaseOut }
+                    : new QuarticEase { EasingMode = EasingMode.EaseOut }
             };
             Storyboard.SetTarget(widthAnim, this);
             Storyboard.SetTargetProperty(widthAnim, new PropertyPath("Width"));
@@ -1746,9 +1876,12 @@ namespace DynamicIslandPC
 
             var heightAnim = new DoubleAnimation
             {
+                From = currentHeight,
                 To = targetHeight,
-                Duration = TimeSpan.FromMilliseconds(350),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                Duration = returnDurationH,
+                EasingFunction = fluidPhysicsEnabled
+                    ? new BackEase { Amplitude = 0.35, EasingMode = EasingMode.EaseOut }
+                    : new CubicEase { EasingMode = EasingMode.EaseOut }
             };
             Storyboard.SetTarget(heightAnim, this);
             Storyboard.SetTargetProperty(heightAnim, new PropertyPath("Height"));
@@ -1756,9 +1889,12 @@ namespace DynamicIslandPC
 
             var leftAnim = new DoubleAnimation
             {
+                From = currentLeft,
                 To = targetLeft,
-                Duration = TimeSpan.FromMilliseconds(380),
-                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+                Duration = returnDurationW,
+                EasingFunction = fluidPhysicsEnabled
+                    ? new BackEase { Amplitude = 0.55, EasingMode = EasingMode.EaseOut }
+                    : new QuarticEase { EasingMode = EasingMode.EaseOut }
             };
             Storyboard.SetTarget(leftAnim, this);
             Storyboard.SetTargetProperty(leftAnim, new PropertyPath("Left"));
@@ -1766,9 +1902,12 @@ namespace DynamicIslandPC
 
             var topAnim = new DoubleAnimation
             {
+                From = currentTop,
                 To = targetTop,
-                Duration = TimeSpan.FromMilliseconds(350),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                Duration = returnDurationH,
+                EasingFunction = fluidPhysicsEnabled
+                    ? new BackEase { Amplitude = 0.35, EasingMode = EasingMode.EaseOut }
+                    : new CubicEase { EasingMode = EasingMode.EaseOut }
             };
             Storyboard.SetTarget(topAnim, this);
             Storyboard.SetTargetProperty(topAnim, new PropertyPath("Top"));
@@ -1861,6 +2000,25 @@ namespace DynamicIslandPC
             SetEqualizerFill(PlaybackIndicatorMinimal, brush);
             SetEqualizerFill(PlaybackIndicatorCompact, brush);
             SetEqualizerFill(PlaybackIndicatorExpanded, brush);
+            UpdateHaloColors(eqColor);
+        }
+
+        private void UpdateHaloColors(Color color)
+        {
+            var strokeColor = Color.FromArgb(215, color.R, color.G, color.B);
+            var brush = new SolidColorBrush(strokeColor);
+            void Apply(System.Windows.Shapes.Ellipse halo)
+            {
+                if (halo == null) return;
+                halo.Stroke = brush;
+                if (halo.Effect is System.Windows.Media.Effects.DropShadowEffect dse)
+                {
+                    dse.Color = color;
+                }
+            }
+            Apply(VinylHaloMinimal);
+            Apply(VinylHaloCompact);
+            Apply(VinylHaloExpanded);
         }
 
         private static void SetEqualizerFill(Panel panel, Brush brush)
@@ -2214,7 +2372,7 @@ namespace DynamicIslandPC
             {
                 if (dep is Button || dep is System.Windows.Controls.Primitives.ButtonBase || dep is TextBox)
                     return true;
-                if (dep is FrameworkElement fe && (fe.Name == "ProgressContainerCompact" || fe.Name == "ProgressContainerExpanded"))
+                if (dep is FrameworkElement fe && (fe.Name.StartsWith("AlbumArt") || fe.Name.StartsWith("Vinyl") || fe.Name == "ProgressContainerCompact" || fe.Name == "ProgressContainerExpanded"))
                     return true;
                 dep = VisualTreeHelper.GetParent(dep);
             }
@@ -2305,9 +2463,30 @@ namespace DynamicIslandPC
         private void RenderVisualizer()
         {
             _visualizerUpdatePending = false;
-            UpdateIndicatorBars(PlaybackIndicatorMinimal, _band0, _band1, _band2, _band3, 4, 18);
-            UpdateIndicatorBars(PlaybackIndicatorCompact, _band0, _band1, _band2, _band3, 4, 18);
-            UpdateIndicatorBars(PlaybackIndicatorExpanded, _band0, _band1, _band2, _band3, 4, 20);
+
+            if (visualizerSkin == 0) // Classic Bars
+            {
+                UpdateIndicatorBars(PlaybackIndicatorMinimal, _band0, _band1, _band2, _band3, 4, 18);
+                UpdateIndicatorBars(PlaybackIndicatorCompact, _band0, _band1, _band2, _band3, 4, 18);
+                UpdateIndicatorBars(PlaybackIndicatorExpanded, _band0, _band1, _band2, _band3, 4, 20);
+            }
+            else if (visualizerSkin == 1) // Halo Ring
+            {
+                UpdateHaloRing(_band0, _band1, _band2, _band3);
+            }
+            else if (visualizerSkin == 2) // Fluid Dots
+            {
+                UpdateIndicatorDots(PlaybackIndicatorMinimal, _band0, _band1, _band2, _band3, 11);
+                UpdateIndicatorDots(PlaybackIndicatorCompact, _band0, _band1, _band2, _band3, 11);
+                UpdateIndicatorDots(PlaybackIndicatorExpanded, _band0, _band1, _band2, _band3, 13);
+            }
+            else if (visualizerSkin == 3) // Combo (Halo + Bars)
+            {
+                UpdateIndicatorBars(PlaybackIndicatorMinimal, _band0, _band1, _band2, _band3, 4, 18);
+                UpdateIndicatorBars(PlaybackIndicatorCompact, _band0, _band1, _band2, _band3, 4, 18);
+                UpdateIndicatorBars(PlaybackIndicatorExpanded, _band0, _band1, _band2, _band3, 4, 20);
+                UpdateHaloRing(_band0, _band1, _band2, _band3);
+            }
 
             if (audioReactiveBreathingEnabled && !_isPeekingDrop)
             {
@@ -2396,9 +2575,358 @@ namespace DynamicIslandPC
 
         private static void SetBarHeight(UIElement element, double height)
         {
-            if (element is System.Windows.Shapes.Rectangle rect && Math.Abs(rect.Height - height) > 0.4)
+            if (element is System.Windows.Shapes.Rectangle rect)
             {
-                rect.Height = height;
+                if (rect.VerticalAlignment != VerticalAlignment.Center)
+                {
+                    rect.VerticalAlignment = VerticalAlignment.Center;
+                }
+                if (Math.Abs(rect.Width - 3.0) > 0.1)
+                {
+                    rect.Width = 3.0;
+                    rect.RadiusX = 1.5;
+                    rect.RadiusY = 1.5;
+                }
+                if (rect.RenderTransform is TranslateTransform tt && Math.Abs(tt.Y) > 0.01)
+                {
+                    tt.Y = 0;
+                }
+                if (Math.Abs(rect.Height - height) > 0.4)
+                {
+                    rect.Height = height;
+                }
+            }
+        }
+
+        private void ApplyVisualizerSkin(int skin)
+        {
+            visualizerSkin = Math.Clamp(skin, 0, 3);
+            bool isPlaying = lastMusicInfo != null && lastMusicInfo.IsPlaying;
+
+            if (visualizerSkin == 1) // Halo Ring only
+            {
+                SetIndicatorVisibility(PlaybackIndicatorMinimal, Visibility.Collapsed);
+                SetIndicatorVisibility(PlaybackIndicatorCompact, Visibility.Collapsed);
+                SetIndicatorVisibility(PlaybackIndicatorExpanded, Visibility.Collapsed);
+                SetHaloOpacity(isPlaying ? 0.45 : 0);
+            }
+            else if (visualizerSkin == 2) // Fluid Dots
+            {
+                SetHaloOpacity(0);
+                ResetBarsGeometry(PlaybackIndicatorMinimal);
+                ResetBarsGeometry(PlaybackIndicatorCompact);
+                ResetBarsGeometry(PlaybackIndicatorExpanded);
+                var vis = isPlaying ? Visibility.Visible : Visibility.Collapsed;
+                SetIndicatorVisibility(PlaybackIndicatorMinimal, vis);
+                SetIndicatorVisibility(PlaybackIndicatorCompact, vis);
+                SetIndicatorVisibility(PlaybackIndicatorExpanded, vis);
+            }
+            else // 0 (Classic Bars) or 3 (Combo)
+            {
+                if (visualizerSkin == 0) SetHaloOpacity(0);
+                else SetHaloOpacity(isPlaying ? 0.45 : 0);
+
+                ResetBarsGeometry(PlaybackIndicatorMinimal);
+                ResetBarsGeometry(PlaybackIndicatorCompact);
+                ResetBarsGeometry(PlaybackIndicatorExpanded);
+                var vis = isPlaying ? Visibility.Visible : Visibility.Collapsed;
+                SetIndicatorVisibility(PlaybackIndicatorMinimal, vis);
+                SetIndicatorVisibility(PlaybackIndicatorCompact, vis);
+                SetIndicatorVisibility(PlaybackIndicatorExpanded, vis);
+            }
+
+            if (isPlaying)
+            {
+                _visualizerUpdatePending = false;
+                RenderVisualizer();
+            }
+        }
+
+        private void UpdateIndicatorsVisibility(bool isPlaying)
+        {
+            bool showBars = isPlaying && (visualizerSkin != 1);
+            var barVis = showBars ? Visibility.Visible : Visibility.Collapsed;
+            SetIndicatorVisibility(PlaybackIndicatorMinimal, barVis);
+            SetIndicatorVisibility(PlaybackIndicatorCompact, barVis);
+            SetIndicatorVisibility(PlaybackIndicatorExpanded, barVis);
+
+            if (!isPlaying || (visualizerSkin != 1 && visualizerSkin != 3))
+            {
+                SetHaloOpacity(0);
+            }
+            else
+            {
+                SetHaloOpacity(0.45);
+            }
+        }
+
+        private static void SetIndicatorVisibility(UIElement element, Visibility visibility)
+        {
+            if (element != null && element.Visibility != visibility)
+            {
+                element.Visibility = visibility;
+            }
+        }
+
+        private void UpdateHaloRing(float b0, float b1, float b2, float b3)
+        {
+            float bassEnergy = Math.Clamp(b0 * 0.65f + b1 * 0.40f + b2 * 0.20f, 0f, 1f);
+            double opacity = 0.35 + bassEnergy * 0.65;
+            double thickness = 1.3 + bassEnergy * 0.9;
+            double blur = 14.0 + bassEnergy * 14.0;
+
+            ApplyHalo(VinylHaloMinimal, opacity, thickness, blur);
+            ApplyHalo(VinylHaloCompact, opacity, thickness, blur);
+            ApplyHalo(VinylHaloExpanded, opacity, thickness + 0.3, blur + 5.0);
+        }
+
+        private static void ApplyHalo(System.Windows.Shapes.Ellipse halo, double opacity, double thickness, double blur)
+        {
+            if (halo == null) return;
+            halo.Opacity = opacity;
+            halo.StrokeThickness = thickness;
+            if (halo.Effect is System.Windows.Media.Effects.DropShadowEffect dse)
+            {
+                dse.BlurRadius = blur;
+                dse.Opacity = Math.Min(1.0, opacity + 0.15);
+            }
+        }
+
+        private void SetHaloOpacity(double opacity)
+        {
+            if (VinylHaloMinimal != null) VinylHaloMinimal.Opacity = opacity;
+            if (VinylHaloCompact != null) VinylHaloCompact.Opacity = opacity;
+            if (VinylHaloExpanded != null) VinylHaloExpanded.Opacity = opacity;
+        }
+
+        private static void UpdateIndicatorDots(StackPanel indicator, float b0, float b1, float b2, float b3, double bounceRange)
+        {
+            if (indicator == null || indicator.Visibility != Visibility.Visible) return;
+            var children = indicator.Children;
+            if (children.Count < 4) return;
+
+            SetDotBounce(children[0], b0, bounceRange);
+            SetDotBounce(children[1], b1, bounceRange);
+            SetDotBounce(children[2], b2, bounceRange);
+            SetDotBounce(children[3], b3, bounceRange);
+        }
+
+        private static void SetDotBounce(UIElement element, float band, double bounceRange)
+        {
+            if (element is System.Windows.Shapes.Rectangle rect)
+            {
+                if (rect.VerticalAlignment != VerticalAlignment.Bottom)
+                {
+                    rect.VerticalAlignment = VerticalAlignment.Bottom;
+                }
+                if (Math.Abs(rect.Width - 4.5) > 0.1 || Math.Abs(rect.Height - 4.5) > 0.1)
+                {
+                    rect.Width = 4.5;
+                    rect.Height = 4.5;
+                    rect.RadiusX = 2.25;
+                    rect.RadiusY = 2.25;
+                }
+
+                if (rect.RenderTransform is not TranslateTransform tt)
+                {
+                    tt = new TranslateTransform();
+                    rect.RenderTransform = tt;
+                }
+
+                double targetY = -Math.Clamp(band * bounceRange, 0.0, bounceRange);
+                if (Math.Abs(tt.Y - targetY) > 0.2)
+                {
+                    tt.Y = targetY;
+                }
+            }
+        }
+
+        private static void ResetBarsGeometry(Panel panel)
+        {
+            if (panel == null) return;
+            foreach (var child in panel.Children)
+            {
+                if (child is System.Windows.Shapes.Rectangle rect)
+                {
+                    rect.VerticalAlignment = VerticalAlignment.Center;
+                    rect.Width = 3.0;
+                    rect.RadiusX = 1.5;
+                    rect.RadiusY = 1.5;
+                    if (rect.RenderTransform is TranslateTransform tt)
+                    {
+                        tt.Y = 0;
+                    }
+                }
+            }
+        }
+
+        private void OnVinylMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!vinylScratchEnabled)
+            {
+                musicService.TogglePlayPause();
+                e.Handled = true;
+                return;
+            }
+
+            if (sender is FrameworkElement fe)
+            {
+                _isScratchingVinyl = true;
+                _activeScratchContainer = fe;
+                fe.CaptureMouse();
+                _scratchCenter = new Point(fe.ActualWidth / 2.0, fe.ActualHeight / 2.0);
+                Point pos = e.GetPosition(fe);
+                _lastScratchVector = pos - _scratchCenter;
+                _accumulatedAngleDelta = 0;
+                _scratchDragTraveled = 0;
+
+                _scratchBaseVinylAngle = AlbumArtRotation?.Angle
+                    ?? AlbumArtMinimalRotation?.Angle
+                    ?? AlbumArtExpandedRotation?.Angle
+                    ?? 0;
+                _currentVinylManualAngle = _scratchBaseVinylAngle;
+                DetachVinylClocksForScratch(_currentVinylManualAngle);
+
+                _scratchBasePosition = lastMusicInfo?.Position ?? TimeSpan.Zero;
+                _scratchCurrentPosition = _scratchBasePosition;
+                _scratchWasPlaying = lastMusicInfo?.IsPlaying ?? false;
+                _isScrubbing = true;
+                e.Handled = true;
+            }
+        }
+
+        private void OnVinylMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_isScratchingVinyl || _activeScratchContainer == null) return;
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                EndVinylScratch(commit: true);
+                return;
+            }
+
+            Point pos = e.GetPosition(_activeScratchContainer);
+            Vector currentVec = pos - _scratchCenter;
+            if (currentVec.Length < 3.0) return;
+
+            double a1 = Math.Atan2(_lastScratchVector.Y, _lastScratchVector.X);
+            double a2 = Math.Atan2(currentVec.Y, currentVec.X);
+            double dAngle = a2 - a1;
+            while (dAngle > Math.PI) dAngle -= 2 * Math.PI;
+            while (dAngle < -Math.PI) dAngle += 2 * Math.PI;
+
+            _accumulatedAngleDelta += dAngle;
+            _scratchDragTraveled += Math.Abs(dAngle);
+            _lastScratchVector = currentVec;
+
+            double deg = dAngle * (180.0 / Math.PI);
+            _currentVinylManualAngle += deg;
+            SetVinylManualAngle(_currentVinylManualAngle);
+
+            if (lastMusicInfo != null && lastMusicInfo.Duration > TimeSpan.Zero)
+            {
+                double secondsPerRev = 15.0; // 1 full spin = 15 seconds seek
+                double secDelta = (_accumulatedAngleDelta / (2 * Math.PI)) * secondsPerRev;
+                double targetSec = Math.Clamp(_scratchBasePosition.TotalSeconds + secDelta, 0.0, lastMusicInfo.Duration.TotalSeconds);
+                _scratchCurrentPosition = TimeSpan.FromSeconds(targetSec);
+                lastMusicInfo.Position = _scratchCurrentPosition;
+                SetProgressRatio(_scratchCurrentPosition.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
+                CurrentTimeText.Text = FormatTime(_scratchCurrentPosition);
+                var remaining = lastMusicInfo.Duration - _scratchCurrentPosition;
+                if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+                TotalTimeText.Text = "-" + FormatTime(remaining);
+            }
+            e.Handled = true;
+        }
+
+        private void OnVinylMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isScratchingVinyl)
+            {
+                EndVinylScratch(commit: true);
+                e.Handled = true;
+            }
+        }
+
+        private void OnVinylLostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (_isScratchingVinyl)
+            {
+                EndVinylScratch(commit: false);
+            }
+        }
+
+        private void DetachVinylClocksForScratch(double currentAngle)
+        {
+            if (_vinylClock != null)
+            {
+                try
+                {
+                    _vinylClock.Controller?.Stop();
+                }
+                catch { }
+                _vinylClock = null;
+            }
+            _isVinylSpinning = false;
+
+            void Detach(RotateTransform rt)
+            {
+                if (rt != null)
+                {
+                    rt.ApplyAnimationClock(RotateTransform.AngleProperty, null);
+                    rt.Angle = currentAngle;
+                }
+            }
+            Detach(AlbumArtMinimalRotation);
+            Detach(AlbumArtRotation);
+            Detach(AlbumArtExpandedRotation);
+            Detach(AlbumArtOldRotation);
+            Detach(AlbumArtExpandedOldRotation);
+        }
+
+        private void SetVinylManualAngle(double angle)
+        {
+            void SetAngle(RotateTransform rt)
+            {
+                if (rt != null) rt.Angle = angle;
+            }
+            SetAngle(AlbumArtMinimalRotation);
+            SetAngle(AlbumArtRotation);
+            SetAngle(AlbumArtExpandedRotation);
+            SetAngle(AlbumArtOldRotation);
+            SetAngle(AlbumArtExpandedOldRotation);
+        }
+
+        private void EndVinylScratch(bool commit)
+        {
+            if (!_isScratchingVinyl) return;
+            _isScratchingVinyl = false;
+
+            if (_activeScratchContainer != null)
+            {
+                try
+                {
+                    _activeScratchContainer.ReleaseMouseCapture();
+                }
+                catch { }
+                _activeScratchContainer = null;
+            }
+
+            _isScrubbing = false;
+
+            if (_scratchDragTraveled < 0.10)
+            {
+                musicService.TogglePlayPause();
+            }
+            else if (commit && lastMusicInfo != null && lastMusicInfo.Duration > TimeSpan.Zero)
+            {
+                _lastSeekTime = DateTime.UtcNow;
+                _lastProgressTickTime = DateTime.UtcNow;
+                _ = musicService.SeekToPositionAsync(_scratchCurrentPosition);
+            }
+
+            if (vinylRotationEnabled && (lastMusicInfo?.IsPlaying ?? false))
+            {
+                StartRotation(_currentVinylManualAngle);
             }
         }
 

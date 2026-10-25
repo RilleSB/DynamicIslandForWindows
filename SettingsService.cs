@@ -27,6 +27,9 @@ namespace DynamicIslandPC
         public bool ExcludeFromCapture { get; set; } = false;
         public bool VinylRotationEnabled { get; set; } = true;
         public bool AudioReactiveBreathingEnabled { get; set; } = true;
+        public bool FluidPhysicsEnabled { get; set; } = false;
+        public bool VinylScratchEnabled { get; set; } = true;
+        public int VisualizerSkin { get; set; } = 0;
     }
 
     public static class SettingsService

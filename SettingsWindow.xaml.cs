@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using Forms = System.Windows.Forms;
 
@@ -24,6 +25,9 @@ namespace DynamicIslandPC
         private bool excludeFromCapture = false;
         private bool vinylRotationEnabled = true;
         private bool audioReactiveBreathingEnabled = true;
+        private bool fluidPhysicsEnabled = false;
+        private bool vinylScratchEnabled = true;
+        private int visualizerSkin = 0;
 
         private readonly AppSettings settings;
         private readonly Action<double, double> onPositionChanged;
@@ -36,6 +40,9 @@ namespace DynamicIslandPC
         private readonly Action<bool> onExcludeFromCaptureChanged;
         private readonly Action<bool> onVinylRotationChanged;
         private readonly Action<bool> onAudioReactiveBreathingChanged;
+        private readonly Action<bool> onFluidPhysicsChanged;
+        private readonly Action<bool> onVinylScratchChanged;
+        private readonly Action<int> onVisualizerSkinChanged;
         private Forms.Screen currentScreen;
 
         public SettingsWindow(
@@ -51,7 +58,10 @@ namespace DynamicIslandPC
             Action<string> monitorChangedCallback = null,
             Action<bool> excludeFromCaptureChangedCallback = null,
             Action<bool> vinylRotationChangedCallback = null,
-            Action<bool> audioReactiveBreathingChangedCallback = null)
+            Action<bool> audioReactiveBreathingChangedCallback = null,
+            Action<bool> fluidPhysicsChangedCallback = null,
+            Action<bool> vinylScratchChangedCallback = null,
+            Action<int> visualizerSkinChangedCallback = null)
         {
             InitializeComponent();
 
@@ -66,6 +76,9 @@ namespace DynamicIslandPC
             onExcludeFromCaptureChanged = excludeFromCaptureChangedCallback;
             onVinylRotationChanged = vinylRotationChangedCallback;
             onAudioReactiveBreathingChanged = audioReactiveBreathingChangedCallback;
+            onFluidPhysicsChanged = fluidPhysicsChangedCallback;
+            onVinylScratchChanged = vinylScratchChangedCallback;
+            onVisualizerSkinChanged = visualizerSkinChangedCallback;
 
             isDarkTheme = settings.IsDarkTheme;
             backgroundColorHex = string.IsNullOrWhiteSpace(settings.BackgroundColor) ? "#FF000000" : settings.BackgroundColor;
@@ -78,6 +91,9 @@ namespace DynamicIslandPC
             excludeFromCapture = settings.ExcludeFromCapture;
             vinylRotationEnabled = settings.VinylRotationEnabled;
             audioReactiveBreathingEnabled = settings.AudioReactiveBreathingEnabled;
+            fluidPhysicsEnabled = settings.FluidPhysicsEnabled;
+            vinylScratchEnabled = settings.VinylScratchEnabled;
+            visualizerSkin = Math.Clamp(settings.VisualizerSkin, 0, 3);
 
             var screens = Forms.Screen.AllScreens;
             int selectedMonitorIndex = 0;
@@ -126,6 +142,9 @@ namespace DynamicIslandPC
             ExcludeFromCaptureCheckBox.IsChecked = excludeFromCapture;
             VinylRotationCheckBox.IsChecked = vinylRotationEnabled;
             AudioReactiveBreathingCheckBox.IsChecked = audioReactiveBreathingEnabled;
+            FluidPhysicsCheckBox.IsChecked = fluidPhysicsEnabled;
+            VinylScratchCheckBox.IsChecked = vinylScratchEnabled;
+            VisualizerSkinComboBox.SelectedIndex = visualizerSkin;
             isUpdating = false;
 
             UpdateThemeButtons();
@@ -563,6 +582,30 @@ namespace DynamicIslandPC
             liquidGlassEnabled = LiquidGlassCheckBox.IsChecked == true;
             settings.LiquidGlassEnabled = liquidGlassEnabled;
             onLiquidGlassChanged?.Invoke(liquidGlassEnabled);
+        }
+
+        private void FluidPhysicsChanged(object sender, RoutedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+            fluidPhysicsEnabled = FluidPhysicsCheckBox.IsChecked == true;
+            settings.FluidPhysicsEnabled = fluidPhysicsEnabled;
+            onFluidPhysicsChanged?.Invoke(fluidPhysicsEnabled);
+        }
+
+        private void VinylScratchChanged(object sender, RoutedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+            vinylScratchEnabled = VinylScratchCheckBox.IsChecked == true;
+            settings.VinylScratchEnabled = vinylScratchEnabled;
+            onVinylScratchChanged?.Invoke(vinylScratchEnabled);
+        }
+
+        private void VisualizerSkinChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!isWindowReady || isUpdating) return;
+            visualizerSkin = Math.Clamp(VisualizerSkinComboBox.SelectedIndex, 0, 3);
+            settings.VisualizerSkin = visualizerSkin;
+            onVisualizerSkinChanged?.Invoke(visualizerSkin);
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)

@@ -405,6 +405,31 @@
                                   Checked="AudioReactiveBreathingChanged"
                                   Unchecked="AudioReactiveBreathingChanged"/>
                         <TextBlock Text="Островок и пластинка мягко «дышат» и пульсируют в такт низким частотам и басам играющего трека."
+                                   Style="{StaticResource HintText}" Margin="0,0,0,12"/>
+
+                        <CheckBox x:Name="VinylScratchCheckBox"
+                                  Content="Интерактивный скретч винила (DJ Scratch Seek)"
+                                  Foreground="White"
+                                  FontWeight="SemiBold"
+                                  FontSize="13"
+                                  Margin="0,0,0,4"
+                                  Checked="VinylScratchChanged"
+                                  Unchecked="VinylScratchChanged"/>
+                        <TextBlock Text="Позволяет крутить пластинку винила мышкой по кругу для тактильной перемотки трека вперед и назад."
+                                   Style="{StaticResource HintText}" Margin="0,0,0,14"/>
+
+                        <TextBlock Text="Стиль аудиовизуализатора" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,6"/>
+                        <ComboBox x:Name="VisualizerSkinComboBox"
+                                  Style="{StaticResource SettingsComboBoxStyle}"
+                                  Height="36"
+                                  Margin="0,0,0,4"
+                                  SelectionChanged="VisualizerSkinChanged">
+                            <ComboBoxItem Content="Классические столбики (Bars)"/>
+                            <ComboBoxItem Content="Неоновое кольцо винила (Halo Ring)"/>
+                            <ComboBoxItem Content="Танцующие капли (Fluid Dots)"/>
+                            <ComboBoxItem Content="Кольцо + Столбики (Комбо)"/>
+                        </ComboBox>
+                        <TextBlock Text="Выбирает форму анимации эквалайзера при воспроизведении звука."
                                    Style="{StaticResource HintText}"/>
                     </StackPanel>
                 </Border>
@@ -444,6 +469,18 @@
                                   Unchecked="ExcludeFromCaptureChanged"/>
 
                         <TextBlock Text="Остров виден вам на мониторе, но автоматически исчезает на снимках экрана, в OBS, Discord и при записи видео."
+                                   Style="{StaticResource HintText}"/>
+
+                        <CheckBox x:Name="FluidPhysicsCheckBox"
+                                  Content="Пружинная физика (Fluid Spring анимации)"
+                                  Foreground="White"
+                                  FontWeight="SemiBold"
+                                  FontSize="13"
+                                  Margin="0,14,0,8"
+                                  Checked="FluidPhysicsChanged"
+                                  Unchecked="FluidPhysicsChanged"/>
+
+                        <TextBlock Text="Органическая физика живой капли: при переключении режимов и паузе остров упруго пружинит с мягким отскоком, как в оригинальной Dynamic Island на iOS."
                                    Style="{StaticResource HintText}"/>
                     </StackPanel>
                 </Border>

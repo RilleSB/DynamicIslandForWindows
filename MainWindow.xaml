@@ -252,7 +252,20 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- Vinyl Record Album Art Minimal -->
-                            <Grid Grid.Column="0" Width="46" Height="46" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <Grid x:Name="VinylContainerMinimal" Grid.Column="0" Width="46" Height="46" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                  Background="Transparent" Cursor="Hand"
+                                  PreviewMouseLeftButtonDown="OnVinylMouseDown"
+                                  PreviewMouseMove="OnVinylMouseMove"
+                                  PreviewMouseLeftButtonUp="OnVinylMouseUp"
+                                  LostMouseCapture="OnVinylLostMouseCapture">
+                                <!-- Halo Ring Minimal -->
+                                <Ellipse x:Name="VinylHaloMinimal" Width="53" Height="53"
+                                         Stroke="#00D2FF" StrokeThickness="1.5" Opacity="0"
+                                         IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Ellipse.Effect>
+                                        <DropShadowEffect BlurRadius="15" ShadowDepth="0" Color="#00D2FF" Opacity="0.95"/>
+                                    </Ellipse.Effect>
+                                </Ellipse>
                                 <Border x:Name="AlbumArtMinimalBorder" Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
                                     <Border.RenderTransform>
                                         <ScaleTransform x:Name="AlbumArtMinimalScale" ScaleX="1" ScaleY="1"/>
@@ -366,7 +379,20 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0" Width="46" Height="46" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <Grid x:Name="VinylContainerCompact" Grid.Column="0" Width="46" Height="46" Margin="10,0,0,0" VerticalAlignment="Center"
+                                      Background="Transparent" Cursor="Hand"
+                                      PreviewMouseLeftButtonDown="OnVinylMouseDown"
+                                      PreviewMouseMove="OnVinylMouseMove"
+                                      PreviewMouseLeftButtonUp="OnVinylMouseUp"
+                                      LostMouseCapture="OnVinylLostMouseCapture">
+                                    <!-- Halo Ring Compact -->
+                                    <Ellipse x:Name="VinylHaloCompact" Width="53" Height="53"
+                                             Stroke="#00D2FF" StrokeThickness="1.5" Opacity="0"
+                                             IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Ellipse.Effect>
+                                            <DropShadowEffect BlurRadius="15" ShadowDepth="0" Color="#00D2FF" Opacity="0.95"/>
+                                        </Ellipse.Effect>
+                                    </Ellipse>
                                     <Border x:Name="AlbumArtBorder" Width="46" Height="46" CornerRadius="23" Background="#141418" BorderBrush="#2EFFFFFF" BorderThickness="0.8" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
                                         <Border.RenderTransform>
                                             <ScaleTransform x:Name="AlbumArtScale" ScaleX="1" ScaleY="1"/>
@@ -499,7 +525,20 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Grid Grid.Column="0" Width="60" Height="60" VerticalAlignment="Center">
+                                    <Grid x:Name="VinylContainerExpanded" Grid.Column="0" Width="60" Height="60" VerticalAlignment="Center"
+                                          Background="Transparent" Cursor="Hand"
+                                          PreviewMouseLeftButtonDown="OnVinylMouseDown"
+                                          PreviewMouseMove="OnVinylMouseMove"
+                                          PreviewMouseLeftButtonUp="OnVinylMouseUp"
+                                          LostMouseCapture="OnVinylLostMouseCapture">
+                                        <!-- Halo Ring Expanded -->
+                                        <Ellipse x:Name="VinylHaloExpanded" Width="70" Height="70"
+                                                 Stroke="#00D2FF" StrokeThickness="1.8" Opacity="0"
+                                                 IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Ellipse.Effect>
+                                                <DropShadowEffect BlurRadius="18" ShadowDepth="0" Color="#00D2FF" Opacity="0.95"/>
+                                            </Ellipse.Effect>
+                                        </Ellipse>
                                         <Border x:Name="AlbumArtExpandedBorder" Width="60" Height="60" CornerRadius="30" Background="#141418" BorderBrush="#30FFFFFF" BorderThickness="1" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
                                             <Border.RenderTransform>
                                                 <ScaleTransform x:Name="AlbumArtExpandedScale" ScaleX="1" ScaleY="1"/>
