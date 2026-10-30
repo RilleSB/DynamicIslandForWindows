@@ -1,6 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,29 +15,17 @@ namespace DynamicIslandPC
 {
     public partial class MainWindow : Window
     {
-        private int displayMode = 0; // 0=minimal, 1=compact, 2=expanded
+        private IslandModeController _islandModeController;
+        private PlaybackUiController _playbackUiController;
         private MusicInfoService musicService;
         private MusicInfo lastMusicInfo = null;
         private bool isPaused = false;
-        private static readonly DoubleAnimation _vinylRotationAnimation = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(12))
-        {
-            RepeatBehavior = RepeatBehavior.Forever
-        };
-        private AnimationClock _vinylClock;
-        private bool _isVinylSpinning = false;
-        private DispatcherTimer _dropPeekTimer;
-        private Storyboard _dropPeekStoryboard;
-        private bool _isPeekingDrop = false;
-        private int _slideDirection = -1;
-        private Storyboard _pauseInStoryboard;
-        private Storyboard _pauseOutStoryboard;
+        private AlbumArtPresenter _albumArtPresenter;
+        private bool _isPeekingDrop => _islandModeController?.IsPeekingDrop == true;
         private DispatcherTimer _pauseDebounceTimer;
-        private System.Windows.Forms.NotifyIcon trayIcon;
-        private Storyboard _revealStoryboard;
-        private Storyboard _compactMarqueeStoryboard;
-        private Storyboard _expandedMarqueeStoryboard;
-        private Storyboard _modeStoryboard;
-        private DateTime _lastModeSwitchAt = DateTime.MinValue;
+        private DispatcherTimer _startupTrimTimer;
+        private TrayMenuController _trayMenuController;
+        private TrackTextPresenter _trackTextPresenter;
         private bool isTopPosition = true;
         private double customX = -1;
         private double customY = -1;
@@ -45,88 +34,39 @@ namespace DynamicIslandPC
         private double scale = 1.0;
         private bool decorationEnabled = true;
         private string decorationMediaPath = "";
-        private bool decorationIsVideo = false;
+        private DecorationController _decorationController;
         private bool gamingModeEnabled = false;
-        private bool lockModeEnabled = false;
+        private bool lockModeEnabled
+        {
+            get => _islandModeController?.LockModeEnabled == true;
+            set { if (_islandModeController != null) _islandModeController.LockModeEnabled = value; }
+        }
         private bool startWithWindowsEnabled = false;
         private bool browserSourceEnabled = true;
-        private System.Windows.Forms.ToolStripMenuItem trayTrackItem;
-        private System.Windows.Forms.ToolStripMenuItem trayPlayPauseItem;
-        private System.Windows.Forms.ToolStripMenuItem trayPositionTopItem;
-        private System.Windows.Forms.ToolStripMenuItem trayPositionBottomItem;
-        private System.Windows.Forms.ToolStripMenuItem trayPositionCustomItem;
-        private System.Windows.Forms.ToolStripMenuItem trayThemeDarkItem;
-        private System.Windows.Forms.ToolStripMenuItem trayThemeLightItem;
-        private System.Windows.Forms.ToolStripMenuItem trayScale100Item;
-        private System.Windows.Forms.ToolStripMenuItem trayScale125Item;
-        private System.Windows.Forms.ToolStripMenuItem trayScale150Item;
-        private System.Windows.Forms.ToolStripMenuItem trayGamingItem;
-        private System.Windows.Forms.ToolStripMenuItem trayLockItem;
-        private System.Windows.Forms.ToolStripMenuItem trayStartupItem;
-        private System.Windows.Forms.ToolStripMenuItem trayBrowserItem;
         private AppSettings _settings;
-        private DispatcherTimer _progressTimer;
-        private DispatcherTimer _topmostWatchdogTimer;
-        private bool _isSmartHidden;
+        private WindowChromeController _windowChromeController;
+        private SmartVisibilityController _smartVisibilityController;
         private AudioVisualizerService _audioVisualizer;
-        private volatile bool _visualizerUpdatePending = false;
-        private float _band0, _band1, _band2, _band3;
+        private int _visualizerUpdatePending;
+        private float _pendingBand0;
+        private float _pendingBand1;
+        private float _pendingBand2;
+        private float _pendingBand3;
+        private bool _isClosing;
         private readonly Action _renderVisualizerAction;
-        private volatile bool _musicInfoUpdatePending = false;
-        private bool _isScrubbing = false;
-        private Grid _activeScrubberContainer = null;
-        private bool _isScratchingVinyl = false;
-        private FrameworkElement _activeScratchContainer = null;
-        private Point _scratchCenter;
-        private Vector _lastScratchVector;
-        private double _accumulatedAngleDelta = 0;
-        private double _scratchDragTraveled = 0;
-        private TimeSpan _scratchBasePosition = TimeSpan.Zero;
-        private TimeSpan _scratchCurrentPosition = TimeSpan.Zero;
-        private double _scratchBaseVinylAngle = 0;
-        private double _currentVinylManualAngle = 0;
-        private bool _scratchWasPlaying = false;
-        private DateTime _lastProgressTickTime = DateTime.UtcNow;
-        private DateTime _lastSeekTime = DateTime.MinValue;
+        private VisualizerRenderer _visualizerRenderer;
+        private SystemVolumeService _systemVolumeService;
+        private bool _updatingSystemVolumeSlider;
+        private int _musicInfoUpdatePending;
         private Point _dragStartPoint;
         private bool _isDraggingReady = false;
+
+        private int displayMode
+        {
+            get => _islandModeController?.DisplayMode ?? 0;
+            set { if (_islandModeController != null) _islandModeController.DisplayMode = Math.Clamp(value, 0, 2); }
+        }
         
-        [DllImport("user32.dll")]
-        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-        
-        [DllImport("user32.dll")]
-        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        [DllImport("user32.dll")]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-        [DllImport("user32.dll")]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool GetWindowDisplayAffinity(IntPtr hWnd, out uint pdwAffinity);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
-
-        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-        private const uint GW_HWNDPREV = 3;
-        private const uint SWP_NOSIZE = 0x0001;
-        private const uint SWP_NOMOVE = 0x0002;
-        private const uint SWP_NOACTIVATE = 0x0010;
-        
-        private const int HOTKEY_ID = 9000;
-        private const uint MOD_CONTROL = 0x0002;
-        private const uint VK_SPACE = 0x20;
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_TRANSPARENT = 0x00000020;
-
         public MainWindow()
         {
             _renderVisualizerAction = RenderVisualizer;
@@ -134,6 +74,64 @@ namespace DynamicIslandPC
             {
                 Logger.Log("Application starting...");
                 InitializeComponent();
+                _trackTextPresenter = new TrackTextPresenter(
+                    CompactTitle, CompactArtist, TrackTitle, ArtistName,
+                    CompactSourceBadge, CompactSourceDot, CompactSourceText,
+                    ExpandedSourceBadge, ExpandedSourceDot, ExpandedSourceText);
+                _albumArtPresenter = new AlbumArtPresenter(
+                    AlbumArtMinimal, AlbumArt, AlbumArtExpanded, AlbumArtPaused,
+                    AlbumArtOld, AlbumArtExpandedOld, RevealAlbumArt,
+                    CompactContentOld, CompactContentNew, ExpandedContentOld, ExpandedContentNew,
+                    CompactOldTranslate, CompactNewTranslate, ExpandedOldTranslate, ExpandedNewTranslate,
+                    CompactTitleOld, CompactArtistOld, CompactSourceTextOld,
+                    TrackTitleOld, ArtistNameOld, ExpandedSourceTextOld,
+                    CompactTitle, CompactArtist, CompactSourceText,
+                    TrackTitle, ArtistName, ExpandedSourceText,
+                    RevealTitleText, RevealSubtitleText, RevealSourceText, TrackRevealOverlay,
+                    AlbumArtMinimalScale, AlbumArtScale, AlbumArtExpandedScale,
+                    AlbumArtMinimalRotation, AlbumArtRotation, AlbumArtExpandedRotation,
+                    AlbumArtOldRotation, AlbumArtExpandedOldRotation,
+                    () => fluidPhysicsEnabled,
+                    PulseIslandDropletOnTrackChange);
+                _playbackUiController = new PlaybackUiController(
+                    ProgressTrackCompact, ProgressBarCompact, ProgressDotCompact,
+                    ProgressTrackExpanded, ProgressBarExpanded, ProgressDotExpanded,
+                    CurrentTimeText, TotalTimeText,
+                    _albumArtPresenter,
+                    () => musicService?.TogglePlayPauseAsync() ?? Task.CompletedTask,
+                    () => musicService?.NextTrackAsync() ?? Task.CompletedTask,
+                    () => musicService?.PreviousTrackAsync() ?? Task.CompletedTask,
+                    position => musicService?.SeekToPositionAsync(position) ?? Task.CompletedTask,
+                    OnPlaybackPositionChanged,
+                    () => vinylScratchEnabled,
+                    () => vinylRotationEnabled,
+                    () => _isClosing);
+                _islandModeController = new IslandModeController(
+                    this,
+                    MinimalMode, CompactMode, ExpandedMode, PausedMode,
+                    IslandBorder,
+                    () => scale,
+                    () => fluidPhysicsEnabled,
+                    () => GetTargetWorkingArea(customX, customY),
+                    () => (isTopPosition, hasCustomPosition, customX, customY),
+                    OnIslandModeTransitionCompleted,
+                    EnsureTopmost);
+                _decorationController = new DecorationController(
+                    GifMinimalContainer, GifCompactContainer, GifExpandedContainer,
+                    GifMinimal, GifCompact, GifExpanded,
+                    DecorVideoMinimal, DecorVideoCompact, DecorVideoExpanded);
+                _visualizerRenderer = new VisualizerRenderer(
+                    MinimalMode, CompactMode, ExpandedMode,
+                    PlaybackIndicatorMinimal, PlaybackIndicatorCompact, PlaybackIndicatorExpanded,
+                    VinylHaloMinimal, VinylHaloCompact, VinylHaloExpanded,
+                    IslandBorderScale,
+                    AlbumArtMinimalScale, AlbumArtScale, AlbumArtExpandedScale,
+                    GifMinimalScale, GifCompactScale, GifExpandedScale);
+                _smartVisibilityController = new SmartVisibilityController(this, EnsureTopmost);
+                _windowChromeController = new WindowChromeController(
+                    this,
+                    OnGlobalHotkey,
+                    () => _smartVisibilityController?.IsSmartHidden == true);
                 Opacity = 0;
                 _settings = SettingsService.Load();
                 ApplySettings(_settings);
@@ -145,16 +143,17 @@ namespace DynamicIslandPC
                 SetTheme(isDarkTheme, applyBackground: false);
                 ApplyDecorationMedia();
                 InitializeMusicService();
-                RegisterGlobalHotkey();
+                _systemVolumeService = new SystemVolumeService(Dispatcher, UpdateSystemVolumeSlider);
                 InitializeTrayIcon();
                 AnimateStartup();
-                var startupTrimTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
-                startupTrimTimer.Tick += (s, e) =>
+                _startupTrimTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+                _startupTrimTimer.Tick += (s, e) =>
                 {
-                    startupTrimTimer.Stop();
+                    _startupTrimTimer.Stop();
+                    _startupTrimTimer = null;
                     TrimMemory();
                 };
-                startupTrimTimer.Start();
+                _startupTrimTimer.Start();
                 Logger.Log("Application started successfully");
             }
             catch (Exception ex)
@@ -183,7 +182,6 @@ namespace DynamicIslandPC
             
             var exitItem = new System.Windows.Controls.MenuItem { Header = "Выход" };
             exitItem.Click += (s, e) => {
-                trayIcon.Visible = false;
                 Application.Current.Shutdown();
             };
             contextMenu.Items.Add(exitItem);
@@ -198,10 +196,6 @@ namespace DynamicIslandPC
                 }
             };
 
-            Deactivated += (s, e) => EnsureTopmost();
-            IsVisibleChanged += (s, e) => { if (IsVisible) EnsureTopmost(); };
-            StateChanged += (s, e) => { if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; EnsureTopmost(); };
-            InitializeTopmostWatchdog();
         }
 
         private MusicInfo _pendingMusicInfo = null;
@@ -212,167 +206,133 @@ namespace DynamicIslandPC
             musicService.SetBrowserSourceEnabled(browserSourceEnabled);
             musicService.MusicInfoChanged += info =>
             {
-                _pendingMusicInfo = info;
-                if (_musicInfoUpdatePending) return;
-                _musicInfoUpdatePending = true;
-                Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
-                {
-                    _musicInfoUpdatePending = false;
-                    var latest = _pendingMusicInfo;
-                    if (latest != null)
-                    {
-                        ApplyMusicInfo(latest);
-                    }
-                }));
+                Interlocked.Exchange(ref _pendingMusicInfo, info);
+                QueueMusicInfoUpdate();
             };
 
             _audioVisualizer = new AudioVisualizerService();
-            _audioVisualizer.BandsUpdated += (b0, b1, b2, b3) =>
-            {
-                _band0 = b0; _band1 = b1; _band2 = b2; _band3 = b3;
-                if (_visualizerUpdatePending) return;
-                _visualizerUpdatePending = true;
-                Dispatcher.BeginInvoke(DispatcherPriority.Render, _renderVisualizerAction);
-            };
+            _audioVisualizer.BandsUpdated += OnVisualizerBandsUpdated;
 
             ApplyMusicInfo(musicService.GetCurrentMusicInfo());
             InitializeProgressTimer();
         }
 
+        private void QueueMusicInfoUpdate()
+        {
+            if (_isClosing)
+            {
+                Interlocked.Exchange(ref _pendingMusicInfo, null);
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref _musicInfoUpdatePending, 1, 0) != 0)
+                return;
+
+            try
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(ProcessPendingMusicInfo));
+            }
+            catch (InvalidOperationException)
+            {
+                Interlocked.Exchange(ref _musicInfoUpdatePending, 0);
+            }
+        }
+
+        private void ProcessPendingMusicInfo()
+        {
+            if (_isClosing)
+            {
+                Interlocked.Exchange(ref _pendingMusicInfo, null);
+                Interlocked.Exchange(ref _musicInfoUpdatePending, 0);
+                return;
+            }
+
+            try
+            {
+                var latest = Interlocked.Exchange(ref _pendingMusicInfo, null);
+                if (!_isClosing && latest != null)
+                    ApplyMusicInfo(latest);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _musicInfoUpdatePending, 0);
+                if (!_isClosing && Volatile.Read(ref _pendingMusicInfo) != null)
+                    QueueMusicInfoUpdate();
+            }
+        }
+
+        private void QueueVisualizerUpdate()
+        {
+            if (_isClosing || _audioVisualizer?.IsEnabled != true || !IsVisible ||
+                lastMusicInfo?.IsPlaying != true)
+                return;
+
+            if (Interlocked.CompareExchange(ref _visualizerUpdatePending, 1, 0) != 0)
+                return;
+
+            try
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Render, _renderVisualizerAction);
+            }
+            catch (InvalidOperationException)
+            {
+                Interlocked.Exchange(ref _visualizerUpdatePending, 0);
+            }
+        }
+
+        private void OnVisualizerBandsUpdated(float band0, float band1, float band2, float band3)
+        {
+            Volatile.Write(ref _pendingBand0, band0);
+            Volatile.Write(ref _pendingBand1, band1);
+            Volatile.Write(ref _pendingBand2, band2);
+            Volatile.Write(ref _pendingBand3, band3);
+            QueueVisualizerUpdate();
+        }
+
         private void InitializeProgressTimer()
         {
-            _lastProgressTickTime = DateTime.UtcNow;
-            _progressTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(250) };
-            _progressTimer.Tick += (s, e) =>
-            {
-                var now = DateTime.UtcNow;
-                var delta = now - _lastProgressTickTime;
-                _lastProgressTickTime = now;
-
-                if (_isScrubbing) return;
-                if (lastMusicInfo == null || lastMusicInfo.Duration <= TimeSpan.Zero) return;
-
-                if (lastMusicInfo.IsPlaying && !isPaused)
-                {
-                    lastMusicInfo.Position += delta;
-                    if (lastMusicInfo.Position > lastMusicInfo.Duration)
-                        lastMusicInfo.Position = lastMusicInfo.Duration;
-                }
-
-                SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
-            };
-            _progressTimer.Start();
-
-            ProgressTrackExpanded.SizeChanged += (s, e) =>
-            {
-                if (!_isScrubbing && lastMusicInfo?.Duration > TimeSpan.Zero)
-                    SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
-            };
+            _playbackUiController.Start();
         }
 
         private void SetProgressRatio(double ratio)
         {
-            if (isPaused) return;
-            ratio = Math.Clamp(ratio, 0.0, 1.0);
-            void Apply(System.Windows.Shapes.Rectangle track, System.Windows.Shapes.Rectangle bar, System.Windows.Shapes.Ellipse dot)
-            {
-                if (track == null || bar == null || dot == null) return;
-                var w = track.ActualWidth;
-                if (w <= 0) return;
-                var filled = w * ratio;
-                bar.Width = filled;
-                dot.Margin = new Thickness(Math.Max(0, filled - (dot.Width / 2)), 0, 0, 0);
-            }
-            Apply(ProgressTrackCompact, ProgressBarCompact, ProgressDotCompact);
-            Apply(ProgressTrackExpanded, ProgressBarExpanded, ProgressDotExpanded);
-
-            if (lastMusicInfo != null && !_isScrubbing)
-            {
-                CurrentTimeText.Text = FormatTime(lastMusicInfo.Position);
-                var remaining = lastMusicInfo.Duration > TimeSpan.Zero
-                    ? lastMusicInfo.Duration - lastMusicInfo.Position
-                    : TimeSpan.Zero;
-                if (remaining < TimeSpan.Zero)
-                    remaining = TimeSpan.Zero;
-                TotalTimeText.Text = "-" + FormatTime(remaining);
-            }
+            _playbackUiController.SetProgressRatio(ratio);
         }
 
-        private static string FormatTime(TimeSpan time)
+        private PlaybackUiState CreatePlaybackUiState()
         {
-            if (time.TotalHours >= 1)
-                return time.ToString(@"h\:mm\:ss");
-            return time.ToString(@"m\:ss");
+            return new PlaybackUiState
+            {
+                TrackKey = lastMusicInfo == null ? null : $"{lastMusicInfo.Artist}|{lastMusicInfo.Title}",
+                Position = lastMusicInfo?.Position ?? TimeSpan.Zero,
+                Duration = lastMusicInfo?.Duration ?? TimeSpan.Zero,
+                IsPlaying = lastMusicInfo?.IsPlaying == true,
+                IsPaused = isPaused
+            };
         }
 
-        private void RegisterGlobalHotkey()
+        private void OnPlaybackPositionChanged(TimeSpan position)
         {
-            var helper = new System.Windows.Interop.WindowInteropHelper(this);
-            if (!RegisterHotKey(helper.Handle, HOTKEY_ID, MOD_CONTROL, VK_SPACE))
-                Logger.Error("Failed to register global hotkey Ctrl+Space");
+            if (!_isClosing && lastMusicInfo != null)
+                lastMusicInfo.Position = position;
         }
 
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
+            _windowChromeController?.OnSourceInitialized();
             var helper = new System.Windows.Interop.WindowInteropHelper(this);
-            var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
-            source.AddHook(HwndHook);
-            ApplyDisplayAffinity(excludeFromCapture);
-            ApplyClickThroughMode();
             WindowBlurHelper.SetAcrylicBlur(helper.Handle, false);
-            EnsureTopmost();
         }
 
-        public void EnsureTopmost()
+        public void EnsureTopmost() => _windowChromeController?.EnsureTopmost();
+
+        private void OnGlobalHotkey()
         {
-            try
-            {
-                var helper = new System.Windows.Interop.WindowInteropHelper(this);
-                var hwnd = helper.Handle;
-                if (hwnd == IntPtr.Zero || !IsVisible || _isSmartHidden)
-                    return;
-
-                IntPtr prevHwnd = GetWindow(hwnd, GW_HWNDPREV);
-                if (prevHwnd != IntPtr.Zero)
-                {
-                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                }
-
-                if (!Topmost)
-                {
-                    Topmost = true;
-                }
-            }
-            catch { }
-        }
-
-        private void InitializeTopmostWatchdog()
-        {
-            _topmostWatchdogTimer = new DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
-            {
-                Interval = TimeSpan.FromSeconds(3.0)
-            };
-            _topmostWatchdogTimer.Tick += (s, e) => EnsureTopmost();
-            _topmostWatchdogTimer.Start();
-        }
-
-        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            const int WM_HOTKEY = 0x0312;
-            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
-            {
-                if (_isSmartHidden || !IsVisible)
-                {
-                    ForceShowIsland();
-                }
-                else
-                {
-                    CycleDisplayMode(force: true);
-                }
-                handled = true;
-            }
-            return IntPtr.Zero;
+            if (_smartVisibilityController?.IsSmartHidden == true || !IsVisible)
+                ForceShowIsland();
+            else
+                CycleDisplayMode(force: true);
         }
         
         private void CycleDisplayMode()
@@ -382,306 +342,84 @@ namespace DynamicIslandPC
 
         private void CycleDisplayMode(bool force)
         {
-            if (lockModeEnabled && !force)
-                return;
-
-            var now = DateTime.UtcNow;
-            if ((now - _lastModeSwitchAt).TotalMilliseconds < 250)
-                return;
-
-            _lastModeSwitchAt = now;
-
-            if (_isPeekingDrop)
-            {
-                CancelDropPeek();
-                displayMode = 1;
-                AnimateToMode();
-                SaveSettings();
-                return;
-            }
-
-            if (isPaused)
+            bool changed = _islandModeController.CycleDisplayMode(force, isPaused, () =>
             {
                 isPaused = false;
                 _pauseDebounceTimer?.Stop();
                 _pauseDebounceTimer = null;
                 AnimateFromPaused();
-                musicService?.TogglePlayPause();
+                _playbackUiController.PlayPauseButtonClick();
+            });
+            if (changed)
                 SaveSettings();
-                return;
-            }
-
-            displayMode = (displayMode + 1) % 3;
-            AnimateToMode();
-            SaveSettings();
         }
 
         private void ApplyInitialDisplayMode()
         {
-            displayMode = Math.Clamp(displayMode, 0, 2);
-            var (baseWidth, baseHeight) = GetModeSize(displayMode);
-            Width = baseWidth * scale;
-            Height = baseHeight * scale;
-            IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
-
-            EnsureActiveDisplayModeVisible();
+            _islandModeController.ApplyInitialDisplayMode();
         }
 
         private void EnsureActiveDisplayModeVisible()
         {
-            if (_isPeekingDrop)
-            {
-                PausedMode.Visibility = Visibility.Collapsed;
-                PausedMode.Opacity = 0;
-
-                MinimalMode.Visibility = Visibility.Collapsed;
-                MinimalMode.Opacity = 0;
-
-                ExpandedMode.Visibility = Visibility.Collapsed;
-                ExpandedMode.Opacity = 0;
-
-                CompactMode.Visibility = Visibility.Visible;
-                CompactMode.Opacity = 1;
-                return;
-            }
-
-            PausedMode.Visibility = Visibility.Collapsed;
-            PausedMode.Opacity = 0;
-
-            MinimalMode.Visibility = displayMode == 0 ? Visibility.Visible : Visibility.Collapsed;
-            CompactMode.Visibility = displayMode == 1 ? Visibility.Visible : Visibility.Collapsed;
-            ExpandedMode.Visibility = displayMode == 2 ? Visibility.Visible : Visibility.Collapsed;
-
-            var activeGrid = GetDisplayModeGrid();
-            activeGrid.Opacity = 1;
+            _islandModeController.EnsureActiveDisplayModeVisible();
         }
 
         private void AnimateToMode()
         {
+            _islandModeController.AnimateToMode();
+        }
+
+        private void AnimateToPaused()
+        {
             CancelDropPeek();
-            _pauseInStoryboard?.Stop();
-            _pauseOutStoryboard?.Stop();
-            _pauseDebounceTimer?.Stop();
-            _pauseDebounceTimer = null;
-            isPaused = false;
-            PausedMode.Visibility = Visibility.Collapsed;
-            PausedMode.Opacity = 0;
-
-            Grid currentMode = MinimalMode.Visibility == Visibility.Visible ? MinimalMode :
-                              CompactMode.Visibility == Visibility.Visible ? CompactMode :
-                              ExpandedMode.Visibility == Visibility.Visible ? ExpandedMode : null;
-            Grid targetMode = displayMode == 0 ? MinimalMode : (displayMode == 1 ? CompactMode : ExpandedMode);
-
-            var (baseWidth, baseHeight) = GetModeSize(displayMode);
-            double targetWidth = baseWidth * scale;
-            double targetHeight = baseHeight * scale;
-            var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
-
-            if (currentMode == null)
-            {
-                EnsureActiveDisplayModeVisible();
-                Width = targetWidth;
-                Height = targetHeight;
-                Left = targetLeft;
-                Top = targetTop;
-                IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
-                return;
-            }
-
-            if (currentMode == targetMode &&
-                Math.Abs(Left - targetLeft) < 1.0 &&
-                Math.Abs(Top - targetTop) < 1.0 &&
-                Math.Abs(Width - targetWidth) < 1.0 &&
-                Math.Abs(Height - targetHeight) < 1.0)
-            {
-                EnsureActiveDisplayModeVisible();
-                return;
-            }
-
-            double currentLeft = Left;
-            double currentTop = Top;
-            double currentWidth = Width;
-            double currentHeight = Height;
-
-            _modeStoryboard?.Stop();
-            ResetModeAnimationState(currentMode);
-
-            Left = currentLeft;
-            Top = currentTop;
-            Width = currentWidth;
-            Height = currentHeight;
-
-            var storyboard = new Storyboard();
-            _modeStoryboard = storyboard;
-
-            IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
-            
-            if (currentMode != targetMode)
-            {
-                targetMode.Visibility = Visibility.Visible;
-                targetMode.Opacity = 0;
-                
-                var fadeOut = new DoubleAnimation
-                {
-                    From = 1,
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(160),
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                };
-                fadeOut.Completed += (s, e) =>
-                {
-                    if (currentMode != targetMode)
-                    {
-                        currentMode.Visibility = Visibility.Collapsed;
-                    }
-                };
-                Storyboard.SetTarget(fadeOut, currentMode);
-                Storyboard.SetTargetProperty(fadeOut, new PropertyPath("Opacity"));
-                storyboard.Children.Add(fadeOut);
-                
-                var fadeIn = new DoubleAnimation
-                {
-                    From = 0,
-                    To = 1,
-                    Duration = TimeSpan.FromMilliseconds(220),
-                    BeginTime = TimeSpan.FromMilliseconds(80),
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                };
-                Storyboard.SetTarget(fadeIn, targetMode);
-                Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
-                storyboard.Children.Add(fadeIn);
-            }
-            else
-            {
-                EnsureActiveDisplayModeVisible();
-            }
-            
-            bool isExpanding = targetWidth > currentWidth || targetHeight > currentHeight;
-            var (hEase, vEase, animDuration) = GetWindowTransitionEasing(450, isExpanding);
-
-            var widthAnimation = new DoubleAnimation
-            {
-                From = currentWidth,
-                To = targetWidth,
-                Duration = animDuration,
-                EasingFunction = hEase
-            };
-            Storyboard.SetTarget(widthAnimation, this);
-            Storyboard.SetTargetProperty(widthAnimation, new PropertyPath("Width"));
-            storyboard.Children.Add(widthAnimation);
-            
-            var heightAnimation = new DoubleAnimation
-            {
-                From = currentHeight,
-                To = targetHeight,
-                Duration = animDuration,
-                EasingFunction = vEase
-            };
-            Storyboard.SetTarget(heightAnimation, this);
-            Storyboard.SetTargetProperty(heightAnimation, new PropertyPath("Height"));
-            storyboard.Children.Add(heightAnimation);
-            
-            var leftAnimation = new DoubleAnimation
-            {
-                From = currentLeft,
-                To = targetLeft,
-                Duration = animDuration,
-                EasingFunction = hEase
-            };
-            Storyboard.SetTarget(leftAnimation, this);
-            Storyboard.SetTargetProperty(leftAnimation, new PropertyPath("Left"));
-            storyboard.Children.Add(leftAnimation);
-            
-            var topAnimation = new DoubleAnimation
-            {
-                From = currentTop,
-                To = targetTop,
-                Duration = animDuration,
-                EasingFunction = vEase
-            };
-            Storyboard.SetTarget(topAnimation, this);
-            Storyboard.SetTargetProperty(topAnimation, new PropertyPath("Top"));
-            storyboard.Children.Add(topAnimation);
-            
-            storyboard.Completed += (s, e) =>
-            {
-                BeginAnimation(LeftProperty, null);
-                BeginAnimation(TopProperty, null);
-                BeginAnimation(WidthProperty, null);
-                BeginAnimation(HeightProperty, null);
-                Left = targetLeft;
-                Top = targetTop;
-                Width = targetWidth;
-                Height = targetHeight;
-
-                EnsureActiveDisplayModeVisible();
-                _modeStoryboard = null;
-                EnsureTopmost();
-                if (lastMusicInfo?.Duration > TimeSpan.Zero)
-                {
-                    SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
-                }
-            };
-            
-            storyboard.Begin();
+            StopRotation();
+            ResetBreathing();
+            _ = _audioVisualizer?.StopAsync();
+            _islandModeController.AnimateToPaused();
         }
 
-        private (IEasingFunction horizontalEase, IEasingFunction verticalEase, TimeSpan duration) GetWindowTransitionEasing(int standardDurationMs, bool isExpanding)
+        private void AnimateFromPaused()
         {
-            if (fluidPhysicsEnabled)
-            {
-                if (isExpanding)
-                {
-                    return (
-                        new BackEase { Amplitude = 0.35, EasingMode = EasingMode.EaseOut },
-                        new BackEase { Amplitude = 0.25, EasingMode = EasingMode.EaseOut },
-                        TimeSpan.FromMilliseconds(standardDurationMs + 40)
-                    );
-                }
-                else
-                {
-                    // Controlled smooth deceleration on contraction without crashing below target bounds
-                    return (
-                        new QuarticEase { EasingMode = EasingMode.EaseOut },
-                        new CubicEase { EasingMode = EasingMode.EaseOut },
-                        TimeSpan.FromMilliseconds(standardDurationMs)
-                    );
-                }
-            }
-
-            return (
-                new QuarticEase { EasingMode = EasingMode.EaseInOut },
-                new CubicEase { EasingMode = EasingMode.EaseInOut },
-                TimeSpan.FromMilliseconds(standardDurationMs)
-            );
+            if (lastMusicInfo?.IsPlaying == true)
+                _ = _audioVisualizer?.StartAsync();
+            _islandModeController.AnimateFromPaused();
         }
 
-        private void ResetModeAnimationState(Grid currentMode)
+        private void TriggerDropPeekToMedium(MusicInfo musicInfo = null)
         {
-            MinimalMode.BeginAnimation(OpacityProperty, null);
-            CompactMode.BeginAnimation(OpacityProperty, null);
-            ExpandedMode.BeginAnimation(OpacityProperty, null);
-            BeginAnimation(WidthProperty, null);
-            BeginAnimation(HeightProperty, null);
-            BeginAnimation(LeftProperty, null);
-            BeginAnimation(TopProperty, null);
+            _islandModeController.TriggerDropPeekToMedium(null);
+        }
 
-            PausedMode.BeginAnimation(OpacityProperty, null);
-            PausedMode.Opacity = 0;
-            PausedMode.Visibility = Visibility.Collapsed;
+        private void CollapseDropPeekToMinimal()
+        {
+            _islandModeController.CollapseDropPeekToMinimal();
+        }
 
-            MinimalMode.Opacity = currentMode == MinimalMode ? 1 : 0;
-            CompactMode.Opacity = currentMode == CompactMode ? 1 : 0;
-            ExpandedMode.Opacity = currentMode == ExpandedMode ? 1 : 0;
+        private void CancelDropPeek()
+        {
+            _islandModeController.CancelDropPeek();
+        }
 
-            MinimalMode.Visibility = currentMode == MinimalMode ? Visibility.Visible : Visibility.Collapsed;
-            CompactMode.Visibility = currentMode == CompactMode ? Visibility.Visible : Visibility.Collapsed;
-            ExpandedMode.Visibility = currentMode == ExpandedMode ? Visibility.Visible : Visibility.Collapsed;
+        private Grid GetDisplayModeGrid() => _islandModeController.ActiveMode;
+
+        private void OnIslandModeTransitionCompleted()
+        {
+            UpdateDecorationVisibility(lastMusicInfo?.IsPlaying == true);
+            if (lastMusicInfo?.Duration > TimeSpan.Zero)
+                SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
+        }
+
+        private void ShowDisplayModeWithoutAnimation()
+        {
+            EnsureActiveDisplayModeVisible();
         }
 
         private void ApplyMusicInfo(MusicInfo musicInfo)
         {
             if (musicInfo == null) return;
+
+            if (musicService?.DisableAlbumArtForDiagnostics == true)
+                musicInfo.AlbumArt = MusicInfoService.DefaultAlbumArt;
             
             bool hasDisplayableMusic = HasDisplayableMusic(musicInfo);
             if (!hasDisplayableMusic)
@@ -704,9 +442,13 @@ namespace DynamicIslandPC
 
             if (trackChanged)
             {
-                SlideContent(musicInfo);
-                TrackRevealOverlay.Visibility = Visibility.Collapsed;
-
+                _albumArtPresenter.PresentTrack(new AlbumArtTrack
+                {
+                    Title = musicInfo.Title,
+                    Artist = musicInfo.Artist,
+                    Source = musicInfo.SourceApp,
+                    AlbumArt = musicInfo.AlbumArt
+                }, !audioReactiveBreathingEnabled);
                 if (displayMode == 0)
                 {
                     TriggerDropPeekToMedium(musicInfo);
@@ -714,17 +456,11 @@ namespace DynamicIslandPC
             }
             else
             {
-                TrackTitle.Text = musicInfo.Title ?? "Неизвестный трек";
-                ArtistName.Text = musicInfo.Artist ?? "Неизвестный исполнитель";
-                CompactTitle.Text = musicInfo.Title ?? "Неизвестный трек";
-                CompactArtist.Text = musicInfo.Artist ?? "Неизвестный исполнитель";
-                AlbumArtMinimal.Source = musicInfo.AlbumArt;
-                AlbumArt.Source = musicInfo.AlbumArt;
-                AlbumArtExpanded.Source = musicInfo.AlbumArt;
+                _albumArtPresenter.UpdateCurrentArtwork(musicInfo.AlbumArt);
             }
 
-            AlbumArtPaused.Source = musicInfo.AlbumArt;
-            ApplySourceVisuals(musicInfo.SourceApp);
+            _trackTextPresenter.SetTrackText(musicInfo.Title, musicInfo.Artist);
+            _trackTextPresenter.ApplySourceVisuals(musicInfo.SourceApp);
             bool artUpdated = lastMusicInfo != null && 
                               lastMusicInfo.AlbumArt == MusicInfoService.DefaultAlbumArt && 
                               musicInfo.AlbumArt != null && 
@@ -739,34 +475,23 @@ namespace DynamicIslandPC
             if (trackChanged || lastMusicInfo == null)
             {
                 lastMusicInfo = musicInfo;
-                _lastProgressTickTime = DateTime.UtcNow;
-                if (!_isScrubbing && musicInfo.Duration > TimeSpan.Zero)
-                    SetProgressRatio(musicInfo.Position.TotalSeconds / musicInfo.Duration.TotalSeconds);
             }
             else
             {
-                bool inSeekCooldown = (DateTime.UtcNow - _lastSeekTime).TotalSeconds < 1.5;
-                if (!_isScrubbing && !inSeekCooldown)
-                {
-                    double diffSeconds = Math.Abs((musicInfo.Position - lastMusicInfo.Position).TotalSeconds);
-                    if (diffSeconds > 2.0 || lastMusicInfo.Position == TimeSpan.Zero)
-                    {
-                        lastMusicInfo.Position = musicInfo.Position;
-                        _lastProgressTickTime = DateTime.UtcNow;
-                    }
-                }
-
                 lastMusicInfo.IsPlaying = musicInfo.IsPlaying;
                 if (musicInfo.Duration > TimeSpan.Zero)
                     lastMusicInfo.Duration = musicInfo.Duration;
                 lastMusicInfo.AlbumArt = musicInfo.AlbumArt;
                 lastMusicInfo.SourceApp = musicInfo.SourceApp;
 
-                if (!_isScrubbing && lastMusicInfo.Duration > TimeSpan.Zero)
-                    SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
             }
 
-            UpdateSmartVisibility(musicInfo, trackChanged);
+            _playbackUiController.UpdateState(CreatePlaybackUiState());
+
+            _smartVisibilityController.UpdateState(
+                hasDisplayableMusic,
+                musicInfo.IsPlaying,
+                trackChanged);
             
             UpdateDecorationVisibility(musicInfo.IsPlaying);
             UpdateIndicatorsVisibility(musicInfo.IsPlaying);
@@ -776,23 +501,22 @@ namespace DynamicIslandPC
                 StartRotation();
                 if (!audioReactiveBreathingEnabled && trackChanged)
                 {
-                    PulseAlbumArt();
+                    _albumArtPresenter.PulseAlbumArt();
                 }
                 SetProgressGlowStrength(0.9);
-                _audioVisualizer?.Start();
+                _ = _audioVisualizer?.StartAsync();
             }
             else
             {
                 StopRotation();
                 ResetBreathing();
                 SetProgressGlowStrength(0.45);
-                _audioVisualizer?.Stop();
+                _ = _audioVisualizer?.StopAsync();
                 SetHaloOpacity(0);
             }
 
             UpdatePlayPauseIcon(musicInfo.IsPlaying);
             this.Title = $"Dynamic Island PC - {musicInfo.Title} - {musicInfo.Artist}";
-            UpdateTitleMarquee();
 
             if (!hasDisplayableMusic)
             {
@@ -807,6 +531,7 @@ namespace DynamicIslandPC
                 {
                     EnsureActiveDisplayModeVisible();
                 }
+                _playbackUiController.UpdateState(CreatePlaybackUiState());
                 return;
             }
 
@@ -849,516 +574,52 @@ namespace DynamicIslandPC
                     }
                 }
             }
+            _playbackUiController.UpdateState(CreatePlaybackUiState());
         }
         
-        private (double width, double height) GetModeSize(int mode) => mode switch
-        {
-            0 => (138, 60),
-            1 => (335, 70),
-            _ => (500, 176)
-        };
-
-        private double GetModeCornerRadius(int mode) => mode switch
-        {
-            0 => 30,
-            1 => 35,
-            _ => 35
-        };
-
-        private Grid GetDisplayModeGrid()
-        {
-            if (_isPeekingDrop)
-                return CompactMode;
-
-            return displayMode switch
-            {
-                0 => MinimalMode,
-                1 => CompactMode,
-                _ => ExpandedMode
-            };
-        }
-
-        private void ShowDisplayModeWithoutAnimation()
-        {
-            EnsureActiveDisplayModeVisible();
-        }
 
         private static bool HasDisplayableMusic(MusicInfo musicInfo)
         {
             return musicInfo?.HasMedia == true && !string.IsNullOrWhiteSpace(musicInfo.Title);
         }
 
-        private void ApplySourceVisuals(string sourceApp)
-        {
-            var sourceName = MusicVisualHelper.NormalizeSource(sourceApp);
-            var badgeLabel = MusicVisualHelper.GetSourceBadgeLabel(sourceName);
-            var sourceColor = MusicVisualHelper.GetSourceColor(sourceName);
-
-            SetSourceBadge(CompactSourceBadge, CompactSourceDot, CompactSourceText, badgeLabel, sourceColor);
-            SetSourceBadge(ExpandedSourceBadge, ExpandedSourceDot, ExpandedSourceText, sourceName, sourceColor);
-        }
-
-        private void SetSourceBadge(Border badge, System.Windows.Shapes.Ellipse dot, TextBlock textBlock, string label, Color sourceColor)
-        {
-            var backgroundAlpha = isDarkTheme ? (byte)36 : (byte)28;
-            var borderAlpha = isDarkTheme ? (byte)64 : (byte)58;
-            badge.Background = new SolidColorBrush(Color.FromArgb(backgroundAlpha, sourceColor.R, sourceColor.G, sourceColor.B));
-            badge.BorderBrush = new SolidColorBrush(Color.FromArgb(borderAlpha, sourceColor.R, sourceColor.G, sourceColor.B));
-            dot.Fill = new SolidColorBrush(sourceColor);
-            textBlock.Text = string.IsNullOrWhiteSpace(label) ? "Media" : label;
-            textBlock.Foreground = isDarkTheme
-                ? new SolidColorBrush(Color.FromRgb(230, 230, 238))
-                : new SolidColorBrush(Color.FromRgb(28, 28, 34));
-        }
-
         private void ApplyDecorationMedia()
         {
-            var customMediaAvailable = !string.IsNullOrWhiteSpace(decorationMediaPath)
-                && File.Exists(decorationMediaPath)
-                && IsSupportedDecorationPath(decorationMediaPath);
-            decorationIsVideo = customMediaAvailable && IsVideoDecorationPath(decorationMediaPath);
-
-            StopDecorationVideos();
-
-            if (decorationIsVideo)
-            {
-                var uri = new Uri(decorationMediaPath, UriKind.Absolute);
-                SetDecorationVideo(DecorVideoMinimal, uri);
-                SetDecorationVideo(DecorVideoCompact, uri);
-                SetDecorationVideo(DecorVideoExpanded, uri);
-
-                GifMinimal.Visibility = Visibility.Collapsed;
-                GifCompact.Visibility = Visibility.Collapsed;
-                GifExpanded.Visibility = Visibility.Collapsed;
-                return;
-            }
-
-            var imageUri = customMediaAvailable
-                ? new Uri(decorationMediaPath, UriKind.Absolute)
-                : new Uri("pack://application:,,,/flex.gif", UriKind.Absolute);
-            var isAnimatedGif = !customMediaAvailable || Path.GetExtension(decorationMediaPath).Equals(".gif", StringComparison.OrdinalIgnoreCase);
-
-            try
-            {
-                SetDecorationImage(GifMinimal, imageUri, isAnimatedGif);
-                SetDecorationImage(GifCompact, imageUri, isAnimatedGif);
-                SetDecorationImage(GifExpanded, imageUri, isAnimatedGif);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Failed to load custom decoration image, falling back to flex.gif", ex);
-                var fallbackUri = new Uri("pack://application:,,,/flex.gif", UriKind.Absolute);
-                SetDecorationImage(GifMinimal, fallbackUri, true);
-                SetDecorationImage(GifCompact, fallbackUri, true);
-                SetDecorationImage(GifExpanded, fallbackUri, true);
-            }
-
-            DecorVideoMinimal.Visibility = Visibility.Collapsed;
-            DecorVideoCompact.Visibility = Visibility.Collapsed;
-            DecorVideoExpanded.Visibility = Visibility.Collapsed;
-            GifMinimal.Visibility = Visibility.Visible;
-            GifCompact.Visibility = Visibility.Visible;
-            GifExpanded.Visibility = Visibility.Visible;
-        }
-
-        private static bool IsVideoDecorationPath(string path)
-        {
-            var ext = Path.GetExtension(path).ToLowerInvariant();
-            return ext is ".mp4" or ".m4v" or ".mov" or ".wmv" or ".avi" or ".webm" or ".mkv";
-        }
-
-        private static bool IsSupportedDecorationPath(string path)
-        {
-            var ext = Path.GetExtension(path).ToLowerInvariant();
-            return ext is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif"
-                or ".mp4" or ".m4v" or ".mov" or ".wmv" or ".avi" or ".webm" or ".mkv";
-        }
-
-        private static void SetDecorationImage(Image image, Uri uri, bool isAnimatedGif)
-        {
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.UriSource = uri;
-            bitmap.EndInit();
-
-            if (isAnimatedGif)
-            {
-                WpfAnimatedGif.ImageBehavior.SetAnimatedSource(image, bitmap);
-            }
-            else
-            {
-                WpfAnimatedGif.ImageBehavior.SetAnimatedSource(image, null);
-                image.Source = bitmap;
-            }
-        }
-
-        private static void SetDecorationVideo(MediaElement video, Uri uri)
-        {
-            video.Source = uri;
-            video.Position = TimeSpan.Zero;
+            _decorationController.ApplySettings(decorationEnabled, decorationMediaPath, displayMode, _isPeekingDrop, lastMusicInfo?.IsPlaying == true);
         }
 
         private void UpdateDecorationVisibility(bool isPlaying)
         {
-            var isVisible = decorationEnabled && isPlaying;
-            var visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
-            GifMinimalContainer.Visibility = visibility;
-            GifCompactContainer.Visibility = visibility;
-            GifExpandedContainer.Visibility = visibility;
-
-            if (decorationIsVideo)
-            {
-                GifMinimal.Visibility = Visibility.Collapsed;
-                GifCompact.Visibility = Visibility.Collapsed;
-                GifExpanded.Visibility = Visibility.Collapsed;
-                SetDecorationVideoVisibility(DecorVideoMinimal, isVisible);
-                SetDecorationVideoVisibility(DecorVideoCompact, isVisible);
-                SetDecorationVideoVisibility(DecorVideoExpanded, isVisible);
-            }
-            else
-            {
-                StopDecorationVideos();
-                GifMinimal.Visibility = Visibility.Visible;
-                GifCompact.Visibility = Visibility.Visible;
-                GifExpanded.Visibility = Visibility.Visible;
-                DecorVideoMinimal.Visibility = Visibility.Collapsed;
-                DecorVideoCompact.Visibility = Visibility.Collapsed;
-                DecorVideoExpanded.Visibility = Visibility.Collapsed;
-            }
-        }
-
-        private static void SetDecorationVideoVisibility(MediaElement video, bool isVisible)
-        {
-            video.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
-            try
-            {
-                if (isVisible)
-                    video.Play();
-                else
-                    video.Pause();
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Failed to update decoration video playback", ex);
-            }
-        }
-
-        private void StopDecorationVideos()
-        {
-            StopDecorationVideo(DecorVideoMinimal);
-            StopDecorationVideo(DecorVideoCompact);
-            StopDecorationVideo(DecorVideoExpanded);
-        }
-
-        private static void StopDecorationVideo(MediaElement video)
-        {
-            try
-            {
-                video.Stop();
-                video.Visibility = Visibility.Collapsed;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Failed to stop decoration video", ex);
-            }
+            _decorationController.UpdateVisibility(isPlaying, displayMode, _isPeekingDrop);
         }
 
         private void DecorationVideo_MediaEnded(object sender, RoutedEventArgs e)
         {
-            if (sender is not MediaElement video || !decorationIsVideo)
-                return;
-
-            video.Position = TimeSpan.Zero;
-            video.Play();
-        }
-
-        private void UpdateSmartVisibility(MusicInfo musicInfo, bool trackChanged)
-        {
-            if (!IsVisible)
-            {
-                Opacity = 1;
-                Show();
-            }
-            EnsureTopmost();
-        }
-
-        private void EnsureSmartHideTimer()
-        {
-        }
-
-        private void ScheduleSmartHide(TimeSpan delay)
-        {
+            _decorationController.OnVideoMediaEnded(sender);
         }
 
         private void ForceShowIsland()
         {
-            if (!IsVisible)
-            {
-                Opacity = 1;
-                Show();
-            }
-            EnsureTopmost();
+            _smartVisibilityController?.ForceShow();
             CycleDisplayMode(force: true);
         }
 
-        private void ShowIslandFromSmartHide(bool trackChanged)
-        {
-            _isSmartHidden = false;
-            if (!IsVisible)
-            {
-                Opacity = 1;
-                Show();
-            }
-
-            Topmost = true;
-            EnsureTopmost();
-            if (trackChanged && !audioReactiveBreathingEnabled)
-                PulseAlbumArt();
-        }
-
-        private void HideIslandForSmartState()
-        {
-            _isSmartHidden = false;
-        }
-
-        private void AnimateToPaused()
-        {
-            CancelDropPeek();
-            StopRotation();
-            ResetBreathing();
-            _audioVisualizer?.Stop();
-            _modeStoryboard?.Stop();
-            _modeStoryboard = null;
-            _pauseOutStoryboard?.Stop();
-            _pauseInStoryboard?.Stop();
-
-            var pausedSize = 60 * scale;
-            var (targetLeft, targetTop) = CalculateWindowPosition(pausedSize, pausedSize);
-
-            var currentMode = MinimalMode.Visibility == Visibility.Visible ? MinimalMode :
-                              CompactMode.Visibility == Visibility.Visible ? CompactMode :
-                              ExpandedMode.Visibility == Visibility.Visible ? ExpandedMode : null;
-
-            if (currentMode == null)
-            {
-                MinimalMode.Visibility = Visibility.Collapsed;
-                CompactMode.Visibility = Visibility.Collapsed;
-                ExpandedMode.Visibility = Visibility.Collapsed;
-                MinimalMode.Opacity = 0;
-                CompactMode.Opacity = 0;
-                ExpandedMode.Opacity = 0;
-
-                PausedMode.Visibility = Visibility.Visible;
-                PausedMode.Opacity = 1;
-                IslandBorder.CornerRadius = new CornerRadius(30 * scale);
-                Width = pausedSize;
-                Height = pausedSize;
-                Left = targetLeft;
-                Top = targetTop;
-                return;
-            }
-
-            var fadeOut = new DoubleAnimation { From = currentMode.Opacity, To = 0, Duration = TimeSpan.FromMilliseconds(200) };
-            fadeOut.Completed += (s, e) =>
-            {
-                MinimalMode.Visibility = Visibility.Collapsed;
-                CompactMode.Visibility = Visibility.Collapsed;
-                ExpandedMode.Visibility = Visibility.Collapsed;
-                MinimalMode.Opacity = 0;
-                CompactMode.Opacity = 0;
-                ExpandedMode.Opacity = 0;
-
-                PausedMode.Visibility = Visibility.Visible;
-                PausedMode.Opacity = 0;
-
-                _pauseInStoryboard = new Storyboard();
-
-                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(200) };
-                Storyboard.SetTarget(fadeIn, PausedMode);
-                Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
-                _pauseInStoryboard.Children.Add(fadeIn);
-
-                IslandBorder.CornerRadius = new CornerRadius(30 * scale);
-                double currentLeft = Left;
-                double currentTop = Top;
-                double currentWidth = Width;
-                double currentHeight = Height;
-                var (hEase, vEase, animDuration) = GetWindowTransitionEasing(380, isExpanding: false);
-                var w = new DoubleAnimation { From = currentWidth, To = pausedSize, Duration = animDuration, EasingFunction = hEase };
-                Storyboard.SetTarget(w, this);
-                Storyboard.SetTargetProperty(w, new PropertyPath("Width"));
-                _pauseInStoryboard.Children.Add(w);
-
-                var h = new DoubleAnimation { From = currentHeight, To = pausedSize, Duration = animDuration, EasingFunction = vEase };
-                Storyboard.SetTarget(h, this);
-                Storyboard.SetTargetProperty(h, new PropertyPath("Height"));
-                _pauseInStoryboard.Children.Add(h);
-
-                var l = new DoubleAnimation { From = currentLeft, To = targetLeft, Duration = animDuration, EasingFunction = hEase };
-                Storyboard.SetTarget(l, this);
-                Storyboard.SetTargetProperty(l, new PropertyPath("Left"));
-                _pauseInStoryboard.Children.Add(l);
-
-                var t = new DoubleAnimation { From = currentTop, To = targetTop, Duration = animDuration, EasingFunction = vEase };
-                Storyboard.SetTarget(t, this);
-                Storyboard.SetTargetProperty(t, new PropertyPath("Top"));
-                _pauseInStoryboard.Children.Add(t);
-
-                _pauseInStoryboard.Begin();
-            };
-            currentMode.BeginAnimation(OpacityProperty, fadeOut);
-        }
-
-        private void AnimateFromPaused()
-        {
-            if (lastMusicInfo != null && lastMusicInfo.IsPlaying)
-            {
-                _audioVisualizer?.Start();
-            }
-            var targetMode = GetDisplayModeGrid();
-            var (baseWidth, baseHeight) = GetModeSize(displayMode);
-            var tw = baseWidth * scale;
-            var th = baseHeight * scale;
-            var (targetLeft, targetTop) = CalculateWindowPosition(tw, th);
-
-            _modeStoryboard?.Stop();
-            _modeStoryboard = null;
-            _pauseInStoryboard?.Stop();
-            _pauseOutStoryboard?.Stop();
-            _pauseOutStoryboard = new Storyboard();
-
-            var fadeOut = new DoubleAnimation { From = PausedMode.Opacity, To = 0, Duration = TimeSpan.FromMilliseconds(180) };
-            fadeOut.Completed += (s, e) =>
-            {
-                PausedMode.Visibility = Visibility.Collapsed;
-                PausedMode.Opacity = 0;
-
-                MinimalMode.Visibility = targetMode == MinimalMode ? Visibility.Visible : Visibility.Collapsed;
-                CompactMode.Visibility = targetMode == CompactMode ? Visibility.Visible : Visibility.Collapsed;
-                ExpandedMode.Visibility = targetMode == ExpandedMode ? Visibility.Visible : Visibility.Collapsed;
-                targetMode.Opacity = 0;
-
-                IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(displayMode) * scale);
-
-                var sb = new Storyboard();
-
-                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(250) };
-                Storyboard.SetTarget(fadeIn, targetMode);
-                Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
-                sb.Children.Add(fadeIn);
-
-                double currentLeft = Left;
-                double currentTop = Top;
-                double currentWidth = Width;
-                double currentHeight = Height;
-                var (unpauseHEase, unpauseVEase, unpauseDuration) = GetWindowTransitionEasing(380, isExpanding: true);
-                var w = new DoubleAnimation { From = currentWidth, To = tw, Duration = unpauseDuration, EasingFunction = unpauseHEase };
-                Storyboard.SetTarget(w, this);
-                Storyboard.SetTargetProperty(w, new PropertyPath("Width"));
-                sb.Children.Add(w);
-
-                var h = new DoubleAnimation { From = currentHeight, To = th, Duration = unpauseDuration, EasingFunction = unpauseVEase };
-                Storyboard.SetTarget(h, this);
-                Storyboard.SetTargetProperty(h, new PropertyPath("Height"));
-                sb.Children.Add(h);
-
-                var l = new DoubleAnimation { From = currentLeft, To = targetLeft, Duration = unpauseDuration, EasingFunction = unpauseHEase };
-                Storyboard.SetTarget(l, this);
-                Storyboard.SetTargetProperty(l, new PropertyPath("Left"));
-                sb.Children.Add(l);
-
-                var t = new DoubleAnimation { From = currentTop, To = targetTop, Duration = unpauseDuration, EasingFunction = unpauseVEase };
-                Storyboard.SetTarget(t, this);
-                Storyboard.SetTargetProperty(t, new PropertyPath("Top"));
-                sb.Children.Add(t);
-
-                sb.Completed += (_, __) =>
-                {
-                    EnsureActiveDisplayModeVisible();
-                    if (lastMusicInfo?.Duration > TimeSpan.Zero)
-                        SetProgressRatio(lastMusicInfo.Position.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
-                };
-                sb.Begin();
-            };
-            PausedMode.BeginAnimation(OpacityProperty, fadeOut);
-        }
 
 
         private void ShowTrackReveal(MusicInfo info)
         {
-            RevealAlbumArt.Source = info.AlbumArt;
-            RevealTitleText.Text = info.Title ?? "Неизвестный трек";
-            RevealSubtitleText.Text = info.Artist ?? "Неизвестный исполнитель";
-            RevealSourceText.Text = !string.IsNullOrWhiteSpace(info.SourceApp) ? info.SourceApp : string.Empty;
-            RevealSourceText.Visibility = string.IsNullOrWhiteSpace(RevealSourceText.Text) ? Visibility.Collapsed : Visibility.Visible;
-
-            _revealStoryboard?.Stop();
-            TrackRevealOverlay.Visibility = Visibility.Visible;
-            TrackRevealOverlay.Opacity = 0;
-            TrackRevealOverlay.RenderTransform = new TranslateTransform(0, 6);
-
-            _revealStoryboard = new Storyboard();
-            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180));
-            var hold = new DoubleAnimation(1, 1, TimeSpan.FromMilliseconds(900)) { BeginTime = TimeSpan.FromMilliseconds(180) };
-            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(1080) };
-            var slideIn = new DoubleAnimation(6, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
-            var slideOut = new DoubleAnimation(0, -4, TimeSpan.FromMilliseconds(260)) { BeginTime = TimeSpan.FromMilliseconds(1080), EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } };
-            fadeOut.Completed += (_, __) => TrackRevealOverlay.Visibility = Visibility.Collapsed;
-
-            Storyboard.SetTarget(fadeIn, TrackRevealOverlay);
-            Storyboard.SetTargetProperty(fadeIn, new PropertyPath("Opacity"));
-            Storyboard.SetTarget(hold, TrackRevealOverlay);
-            Storyboard.SetTargetProperty(hold, new PropertyPath("Opacity"));
-            Storyboard.SetTarget(fadeOut, TrackRevealOverlay);
-            Storyboard.SetTargetProperty(fadeOut, new PropertyPath("Opacity"));
-            Storyboard.SetTarget(slideIn, TrackRevealOverlay);
-            Storyboard.SetTargetProperty(slideIn, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
-            Storyboard.SetTarget(slideOut, TrackRevealOverlay);
-            Storyboard.SetTargetProperty(slideOut, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
-
-            _revealStoryboard.Children.Add(fadeIn);
-            _revealStoryboard.Children.Add(hold);
-            _revealStoryboard.Children.Add(fadeOut);
-            _revealStoryboard.Children.Add(slideIn);
-            _revealStoryboard.Children.Add(slideOut);
-            _revealStoryboard.Begin();
+            _albumArtPresenter.ShowTrackReveal(new AlbumArtTrack
+            {
+                Title = info?.Title,
+                Artist = info?.Artist,
+                Source = info?.SourceApp,
+                AlbumArt = info?.AlbumArt
+            });
         }
 
         private void PulseAlbumArt()
         {
-            void ApplyPulse(ScaleTransform scale)
-            {
-                if (scale == null) return;
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-
-                var pulseX = new DoubleAnimationUsingKeyFrames();
-                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(180)))
-                {
-                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-                });
-                pulseX.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(460)))
-                {
-                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-                });
-
-                var pulseY = pulseX.Clone();
-                pulseX.Completed += (s, e) =>
-                {
-                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                    scale.ScaleX = 1.0;
-                    scale.ScaleY = 1.0;
-                };
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulseX);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulseY);
-            }
-
-            ApplyPulse(AlbumArtMinimalScale);
-            ApplyPulse(AlbumArtScale);
-            ApplyPulse(AlbumArtExpandedScale);
+            _albumArtPresenter.PulseAlbumArt();
         }
 
         private void SetProgressGlowStrength(double opacity)
@@ -1369,266 +630,36 @@ namespace DynamicIslandPC
                 expandedGlow.Opacity = opacity * 0.55;
         }
 
-        private string _lastCompactMarqueeText;
-        private string _lastExpandedMarqueeText;
-
-        private void UpdateTitleMarquee()
-        {
-            UpdateSingleMarquee(CompactTitle, CompactTitleTranslate, ref _compactMarqueeStoryboard, ref _lastCompactMarqueeText, 124);
-            UpdateSingleMarquee(TrackTitle, TrackTitleTranslate, ref _expandedMarqueeStoryboard, ref _lastExpandedMarqueeText, 246);
-            CompactTitleOldTranslate.X = 0;
-            TrackTitleOldTranslate.X = 0;
-        }
-
-        private void StopTitleMarquee()
-        {
-            _compactMarqueeStoryboard?.Stop();
-            _compactMarqueeStoryboard = null;
-            _expandedMarqueeStoryboard?.Stop();
-            _expandedMarqueeStoryboard = null;
-            CompactTitleTranslate.BeginAnimation(TranslateTransform.XProperty, null);
-            TrackTitleTranslate.BeginAnimation(TranslateTransform.XProperty, null);
-            CompactTitleTranslate.X = 0;
-            TrackTitleTranslate.X = 0;
-            _lastCompactMarqueeText = null;
-            _lastExpandedMarqueeText = null;
-            CompactTitleOldTranslate.X = 0;
-            TrackTitleOldTranslate.X = 0;
-        }
-
-        private void UpdateSingleMarquee(TextBlock textBlock, TranslateTransform translate, ref Storyboard storyboard, ref string lastText, double visibleWidth)
-        {
-            var text = textBlock.Text;
-            if (string.Equals(text, lastText, StringComparison.Ordinal) && storyboard != null)
-                return;
-
-            lastText = text;
-            storyboard?.Stop();
-            storyboard = null;
-            translate.BeginAnimation(TranslateTransform.XProperty, null);
-            translate.X = 0;
-
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
-            double measuredWidth = MeasureStringWidth(textBlock, text);
-            if (measuredWidth <= visibleWidth + 4)
-                return;
-
-            var shift = measuredWidth - visibleWidth + 14;
-            double scrollDuration = Math.Clamp(2400 + shift * 18, 2800, 6500);
-
-            storyboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever };
-            var animation = new DoubleAnimationUsingKeyFrames();
-            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100))));
-            animation.KeyFrames.Add(new EasingDoubleKeyFrame(-shift, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100 + scrollDuration))) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } });
-            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(-shift, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300 + scrollDuration))));
-            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2310 + scrollDuration))));
-
-            Storyboard.SetTarget(animation, translate);
-            Storyboard.SetTargetProperty(animation, new PropertyPath(TranslateTransform.XProperty));
-            storyboard.Children.Add(animation);
-            storyboard.Begin();
-        }
-
-        private static double MeasureStringWidth(TextBlock textBlock, string text)
-        {
-            if (string.IsNullOrEmpty(text) || textBlock == null)
-                return 0;
-
-            var typeface = new Typeface(textBlock.FontFamily, textBlock.FontStyle, textBlock.FontWeight, textBlock.FontStretch);
-            var dpi = VisualTreeHelper.GetDpi(textBlock);
-            var formattedText = new FormattedText(
-                text,
-                System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                typeface,
-                textBlock.FontSize,
-                Brushes.Black,
-                dpi.PixelsPerDip);
-
-            return formattedText.Width;
-        }
-
         private void StartRotation(double fromAngle = double.NaN)
         {
-            if (!vinylRotationEnabled) return;
-
-            if (!double.IsNaN(fromAngle))
-            {
-                double normalized = fromAngle % 360.0;
-                if (normalized < 0) normalized += 360.0;
-                var anim = new DoubleAnimation(normalized, normalized + 360.0, TimeSpan.FromSeconds(12))
-                {
-                    RepeatBehavior = RepeatBehavior.Forever
-                };
-                _vinylClock = anim.CreateClock();
-                AlbumArtMinimalRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                AlbumArtRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                AlbumArtExpandedRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                AlbumArtOldRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                AlbumArtExpandedOldRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                _isVinylSpinning = true;
-                return;
-            }
-
-            if (_vinylClock == null)
-            {
-                _vinylClock = _vinylRotationAnimation.CreateClock();
-                AlbumArtMinimalRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                AlbumArtRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                AlbumArtExpandedRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                AlbumArtOldRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                AlbumArtExpandedOldRotation?.ApplyAnimationClock(RotateTransform.AngleProperty, _vinylClock);
-                _isVinylSpinning = true;
-            }
-            else if (!_isVinylSpinning)
-            {
-                _vinylClock.Controller.Resume();
-                _isVinylSpinning = true;
-            }
+            _albumArtPresenter.StartRotation(fromAngle);
         }
 
         private void StopRotation()
         {
-            if (_vinylClock != null && _isVinylSpinning)
-            {
-                _vinylClock.Controller.Pause();
-                _isVinylSpinning = false;
-            }
+            _albumArtPresenter.StopRotation();
         }
 
         private void ResetVinylRotation()
         {
-            if (_vinylClock != null)
-            {
-                try
-                {
-                    _vinylClock.Controller?.Stop();
-                    _vinylClock.Controller?.Pause();
-                }
-                catch { }
-                _isVinylSpinning = false;
-            }
-
-            void ResetAngle(RotateTransform rt)
-            {
-                if (rt != null)
-                {
-                    rt.ApplyAnimationClock(RotateTransform.AngleProperty, null);
-                    rt.Angle = 0;
-                }
-            }
-
-            ResetAngle(AlbumArtMinimalRotation);
-            ResetAngle(AlbumArtRotation);
-            ResetAngle(AlbumArtExpandedRotation);
-            ResetAngle(AlbumArtOldRotation);
-            ResetAngle(AlbumArtExpandedOldRotation);
-            _vinylClock = null;
+            _albumArtPresenter.ResetVinylRotation();
         }
 
-        private static void StopSlideAnimations(TranslateTransform oldTransform, TranslateTransform newTransform)
+        private void ClearAlbumArtLayersForDiagnostics()
         {
-            oldTransform.BeginAnimation(TranslateTransform.XProperty, null);
-            newTransform.BeginAnimation(TranslateTransform.XProperty, null);
+            _albumArtPresenter.ClearForDiagnostics(MusicInfoService.DefaultAlbumArt);
+            if (lastMusicInfo != null)
+                lastMusicInfo.AlbumArt = MusicInfoService.DefaultAlbumArt;
         }
 
-        private static void ResetSlideLayerState(Grid oldLayer, Grid newLayer, TranslateTransform oldTransform, TranslateTransform newTransform)
+        private void DetachVinylClocksForScratch(double currentAngle)
         {
-            StopSlideAnimations(oldTransform, newTransform);
-            oldLayer.BeginAnimation(OpacityProperty, null);
-            newLayer.BeginAnimation(OpacityProperty, null);
-            oldTransform.X = 0;
-            newTransform.X = 0;
-            oldLayer.Opacity = 0;
-            newLayer.Opacity = 1;
+            _albumArtPresenter.DetachVinylClocksForScratch(currentAngle);
         }
-        
-        private void SlideContent(MusicInfo info)
+
+        private void SetVinylManualAngle(double angle)
         {
-            var enterDur = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromMilliseconds(460);
-            var exitDur = TimeSpan.FromMilliseconds(340);
-            var enterEase = fluidPhysicsEnabled
-                ? (IEasingFunction)new BackEase { Amplitude = 0.55, EasingMode = EasingMode.EaseOut }
-                : (IEasingFunction)new CubicEase { EasingMode = EasingMode.EaseOut };
-            var smoothEase = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            var dir = _slideDirection == 0 ? -1 : _slideDirection;
-            var compactExitX = dir * 20.0;
-            var compactEnterX = -dir * 24.0;
-
-            var expandedExitX = dir * 24.0;
-            var expandedEnterX = -dir * 28.0;
-
-            ResetSlideLayerState(CompactContentOld, CompactContentNew, CompactOldTranslate, CompactNewTranslate);
-            ResetSlideLayerState(ExpandedContentOld, ExpandedContentNew, ExpandedOldTranslate, ExpandedNewTranslate);
-
-            // Заполняем старый контент текущими данными
-            AlbumArtOld.Source = AlbumArt.Source;
-            AlbumArtExpandedOld.Source = AlbumArtExpanded.Source;
-            CompactTitleOld.Text = CompactTitle.Text;
-            CompactArtistOld.Text = CompactArtist.Text;
-            CompactSourceTextOld.Text = CompactSourceText.Text;
-            TrackTitleOld.Text = TrackTitle.Text;
-            ArtistNameOld.Text = ArtistName.Text;
-            ExpandedSourceTextOld.Text = ExpandedSourceText.Text;
-            CompactTextOldContainer.Opacity = 1;
-            ExpandedTextOldContainer.Opacity = 1;
-
-            // Заполняем новый контент
-            AlbumArt.Source = info.AlbumArt;
-            AlbumArtExpanded.Source = info.AlbumArt;
-            AlbumArtMinimal.Source = info.AlbumArt;
-            CompactTitle.Text = info.Title ?? "Неизвестный трек";
-            CompactArtist.Text = info.Artist ?? "Неизвестный исполнитель";
-            TrackTitle.Text = info.Title ?? "Неизвестный трек";
-            ArtistName.Text = info.Artist ?? "Неизвестный исполнитель";
-
-            void Slide(Grid oldLayer, Grid newLayer, TranslateTransform oldTransform, TranslateTransform newTransform, double exitX, double enterX)
-            {
-                oldLayer.Opacity = 1;
-                newLayer.Opacity = 0;
-                oldTransform.X = 0;
-                newTransform.X = enterX;
-
-                // Старый трек мягко уплывает со сглаженным затуханием
-                var exitAnim = new DoubleAnimation(0, exitX, exitDur) { EasingFunction = smoothEase };
-                var fadeOut = new DoubleAnimation(1, 0, exitDur) { EasingFunction = smoothEase };
-
-                // Новый трек плавно вплывает на место
-                var enterAnim = new DoubleAnimation(enterX, 0, enterDur) { EasingFunction = enterEase };
-                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(380)) { EasingFunction = smoothEase };
-
-                enterAnim.Completed += (_, __) =>
-                {
-                    ResetSlideLayerState(oldLayer, newLayer, oldTransform, newTransform);
-                    AlbumArtOld.Source = null;
-                    AlbumArtExpandedOld.Source = null;
-                    _slideDirection = -1;
-                };
-
-                oldTransform.BeginAnimation(TranslateTransform.XProperty, exitAnim);
-                newTransform.BeginAnimation(TranslateTransform.XProperty, enterAnim);
-                oldLayer.BeginAnimation(OpacityProperty, fadeOut);
-                newLayer.BeginAnimation(OpacityProperty, fadeIn);
-            }
-
-            if (AlbumArtOldRotation != null && AlbumArtRotation != null)
-                AlbumArtOldRotation.Angle = AlbumArtRotation.Angle;
-            if (AlbumArtExpandedOldRotation != null && AlbumArtExpandedRotation != null)
-                AlbumArtExpandedOldRotation.Angle = AlbumArtExpandedRotation.Angle;
-
-            Slide(CompactContentOld, CompactContentNew, CompactOldTranslate, CompactNewTranslate, compactExitX, compactEnterX);
-            Slide(ExpandedContentOld, ExpandedContentNew, ExpandedOldTranslate, ExpandedNewTranslate, expandedExitX, expandedEnterX);
-
-            if (!audioReactiveBreathingEnabled)
-            {
-                PulseAlbumArt();
-            }
-
-            PulseIslandDropletOnTrackChange();
+            _albumArtPresenter.SetVinylManualAngle(angle);
         }
 
         private void PulseIslandDropletOnTrackChange()
@@ -1677,306 +708,6 @@ namespace DynamicIslandPC
             IslandBorderScale.BeginAnimation(ScaleTransform.ScaleYProperty, pulseY);
         }
 
-        private void TriggerDropPeekToMedium(MusicInfo musicInfo = null)
-        {
-            if (isPaused)
-            {
-                isPaused = false;
-                _pauseInStoryboard?.Stop();
-                PausedMode.Visibility = Visibility.Collapsed;
-                PausedMode.Opacity = 0;
-            }
-
-            if (_dropPeekTimer != null)
-            {
-                _dropPeekTimer.Stop();
-                _dropPeekTimer = null;
-            }
-
-            _dropPeekStoryboard?.Stop();
-            _dropPeekStoryboard = null;
-            _modeStoryboard?.Stop();
-            _modeStoryboard = null;
-
-            _isPeekingDrop = true;
-
-            // Ensure CompactMode contents are populated and visible
-            if (musicInfo != null)
-            {
-                CompactTitle.Text = musicInfo.Title ?? "Неизвестный трек";
-                CompactArtist.Text = musicInfo.Artist ?? "Неизвестный исполнитель";
-                if (musicInfo.AlbumArt != null)
-                    AlbumArt.Source = musicInfo.AlbumArt;
-            }
-
-            CompactContentOld.BeginAnimation(OpacityProperty, null);
-            CompactContentOld.Opacity = 0;
-            CompactContentNew.BeginAnimation(OpacityProperty, null);
-            CompactContentNew.Opacity = 1;
-            CompactNewTranslate.BeginAnimation(TranslateTransform.XProperty, null);
-            CompactNewTranslate.X = 0;
-
-            MinimalMode.BeginAnimation(OpacityProperty, null);
-            MinimalMode.Visibility = Visibility.Collapsed;
-            MinimalMode.Opacity = 0;
-
-            CompactMode.BeginAnimation(OpacityProperty, null);
-            CompactMode.Visibility = Visibility.Visible;
-            CompactMode.Opacity = 1;
-
-            var (baseWidth, baseHeight) = GetModeSize(1);
-            double targetWidth = baseWidth * scale;
-            double targetHeight = baseHeight * scale;
-            var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
-
-            double currentLeft = Left;
-            double currentTop = Top;
-            double currentWidth = Width;
-            double currentHeight = Height;
-
-            IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(1) * scale);
-
-            var sb = new Storyboard();
-            _dropPeekStoryboard = sb;
-
-            var peekAmplitudeW = fluidPhysicsEnabled ? 0.75 : 0.28;
-            var peekAmplitudeH = fluidPhysicsEnabled ? 0.45 : 0.18;
-            var peekDurationW = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(520) : TimeSpan.FromMilliseconds(460);
-            var peekDurationH = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(460) : TimeSpan.FromMilliseconds(420);
-
-            var widthAnim = new DoubleAnimation
-            {
-                From = currentWidth,
-                To = targetWidth,
-                Duration = peekDurationW,
-                EasingFunction = new BackEase { Amplitude = peekAmplitudeW, EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(widthAnim, this);
-            Storyboard.SetTargetProperty(widthAnim, new PropertyPath("Width"));
-            sb.Children.Add(widthAnim);
-
-            var heightAnim = new DoubleAnimation
-            {
-                From = currentHeight,
-                To = targetHeight,
-                Duration = peekDurationH,
-                EasingFunction = new BackEase { Amplitude = peekAmplitudeH, EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(heightAnim, this);
-            Storyboard.SetTargetProperty(heightAnim, new PropertyPath("Height"));
-            sb.Children.Add(heightAnim);
-
-            var leftAnim = new DoubleAnimation
-            {
-                From = currentLeft,
-                To = targetLeft,
-                Duration = peekDurationW,
-                EasingFunction = new BackEase { Amplitude = peekAmplitudeW, EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(leftAnim, this);
-            Storyboard.SetTargetProperty(leftAnim, new PropertyPath("Left"));
-            sb.Children.Add(leftAnim);
-
-            var topAnim = new DoubleAnimation
-            {
-                From = currentTop,
-                To = targetTop,
-                Duration = peekDurationH,
-                EasingFunction = new BackEase { Amplitude = peekAmplitudeH, EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(topAnim, this);
-            Storyboard.SetTargetProperty(topAnim, new PropertyPath("Top"));
-            sb.Children.Add(topAnim);
-
-            // Subtle smooth slide-in for the track info layer matching the expanding droplet
-            var contentSlide = new DoubleAnimation
-            {
-                From = 24,
-                To = 0,
-                Duration = TimeSpan.FromMilliseconds(400),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            CompactNewTranslate.BeginAnimation(TranslateTransform.XProperty, contentSlide);
-
-            sb.Completed += (s, e) =>
-            {
-                Width = targetWidth;
-                Height = targetHeight;
-                Left = targetLeft;
-                Top = targetTop;
-                BeginAnimation(WidthProperty, null);
-                BeginAnimation(HeightProperty, null);
-                BeginAnimation(LeftProperty, null);
-                BeginAnimation(TopProperty, null);
-
-                CompactMode.Visibility = Visibility.Visible;
-                CompactMode.Opacity = 1;
-                MinimalMode.Visibility = Visibility.Collapsed;
-                MinimalMode.Opacity = 0;
-                _dropPeekStoryboard = null;
-                EnsureTopmost();
-
-                _dropPeekTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2800) };
-                _dropPeekTimer.Tick += (sender, args) =>
-                {
-                    _dropPeekTimer?.Stop();
-                    _dropPeekTimer = null;
-                    CollapseDropPeekToMinimal();
-                };
-                _dropPeekTimer.Start();
-            };
-
-            sb.Begin();
-        }
-
-        private void CollapseDropPeekToMinimal()
-        {
-            if (!_isPeekingDrop || displayMode != 0)
-            {
-                _isPeekingDrop = false;
-                return;
-            }
-
-            _dropPeekStoryboard?.Stop();
-            _dropPeekStoryboard = null;
-            _modeStoryboard?.Stop();
-            _modeStoryboard = null;
-
-            var (baseWidth, baseHeight) = GetModeSize(0);
-            double targetWidth = baseWidth * scale;
-            double targetHeight = baseHeight * scale;
-            var (targetLeft, targetTop) = CalculateWindowPosition(targetWidth, targetHeight);
-
-            double currentLeft = Left;
-            double currentTop = Top;
-            double currentWidth = Width;
-            double currentHeight = Height;
-
-            MinimalMode.Visibility = Visibility.Visible;
-            MinimalMode.Opacity = 0;
-
-            var sb = new Storyboard();
-            _dropPeekStoryboard = sb;
-
-            var returnDurationW = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(440) : TimeSpan.FromMilliseconds(380);
-            var returnDurationH = fluidPhysicsEnabled ? TimeSpan.FromMilliseconds(400) : TimeSpan.FromMilliseconds(350);
-
-            var widthAnim = new DoubleAnimation
-            {
-                From = currentWidth,
-                To = targetWidth,
-                Duration = returnDurationW,
-                EasingFunction = fluidPhysicsEnabled
-                    ? new BackEase { Amplitude = 0.55, EasingMode = EasingMode.EaseOut }
-                    : new QuarticEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(widthAnim, this);
-            Storyboard.SetTargetProperty(widthAnim, new PropertyPath("Width"));
-            sb.Children.Add(widthAnim);
-
-            var heightAnim = new DoubleAnimation
-            {
-                From = currentHeight,
-                To = targetHeight,
-                Duration = returnDurationH,
-                EasingFunction = fluidPhysicsEnabled
-                    ? new BackEase { Amplitude = 0.35, EasingMode = EasingMode.EaseOut }
-                    : new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(heightAnim, this);
-            Storyboard.SetTargetProperty(heightAnim, new PropertyPath("Height"));
-            sb.Children.Add(heightAnim);
-
-            var leftAnim = new DoubleAnimation
-            {
-                From = currentLeft,
-                To = targetLeft,
-                Duration = returnDurationW,
-                EasingFunction = fluidPhysicsEnabled
-                    ? new BackEase { Amplitude = 0.55, EasingMode = EasingMode.EaseOut }
-                    : new QuarticEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(leftAnim, this);
-            Storyboard.SetTargetProperty(leftAnim, new PropertyPath("Left"));
-            sb.Children.Add(leftAnim);
-
-            var topAnim = new DoubleAnimation
-            {
-                From = currentTop,
-                To = targetTop,
-                Duration = returnDurationH,
-                EasingFunction = fluidPhysicsEnabled
-                    ? new BackEase { Amplitude = 0.35, EasingMode = EasingMode.EaseOut }
-                    : new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(topAnim, this);
-            Storyboard.SetTargetProperty(topAnim, new PropertyPath("Top"));
-            sb.Children.Add(topAnim);
-
-            var fadeOutCompact = new DoubleAnimation
-            {
-                To = 0,
-                Duration = TimeSpan.FromMilliseconds(180),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(fadeOutCompact, CompactMode);
-            Storyboard.SetTargetProperty(fadeOutCompact, new PropertyPath("Opacity"));
-            sb.Children.Add(fadeOutCompact);
-
-            var fadeInMin = new DoubleAnimation
-            {
-                From = 0,
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(220),
-                BeginTime = TimeSpan.FromMilliseconds(120),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(fadeInMin, MinimalMode);
-            Storyboard.SetTargetProperty(fadeInMin, new PropertyPath("Opacity"));
-            sb.Children.Add(fadeInMin);
-
-            IslandBorder.CornerRadius = new CornerRadius(GetModeCornerRadius(0) * scale);
-
-            sb.Completed += (s, e) =>
-            {
-                Width = targetWidth;
-                Height = targetHeight;
-                Left = targetLeft;
-                Top = targetTop;
-                BeginAnimation(WidthProperty, null);
-                BeginAnimation(HeightProperty, null);
-                BeginAnimation(LeftProperty, null);
-                BeginAnimation(TopProperty, null);
-
-                CompactMode.BeginAnimation(OpacityProperty, null);
-                MinimalMode.BeginAnimation(OpacityProperty, null);
-
-                _isPeekingDrop = false;
-                _dropPeekStoryboard = null;
-                EnsureActiveDisplayModeVisible();
-                EnsureTopmost();
-            };
-
-            sb.Begin();
-        }
-
-        private void CancelDropPeek()
-        {
-            if (_dropPeekTimer != null)
-            {
-                _dropPeekTimer.Stop();
-                _dropPeekTimer = null;
-            }
-            if (_dropPeekStoryboard != null)
-            {
-                _dropPeekStoryboard.Stop();
-                _dropPeekStoryboard = null;
-            }
-            _isPeekingDrop = false;
-            CompactMode.BeginAnimation(OpacityProperty, null);
-            MinimalMode.BeginAnimation(OpacityProperty, null);
-        }
-        
         private const string PlayPathData = "M 5 3 L 16 10 L 5 17 Z";
         private const string PausePathData = "M 4 3 L 7 3 L 7 15 L 4 15 Z M 11 3 L 14 3 L 14 15 L 11 15 Z";
 
@@ -2036,21 +767,19 @@ namespace DynamicIslandPC
         private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
-            musicService.TogglePlayPause();
+            _playbackUiController.PlayPauseButtonClick();
         }
 
         private void NextButton_Click(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
-            _slideDirection = -1;
-            musicService.NextTrack();
+            _playbackUiController.NextButtonClick();
         }
 
         private void PrevButton_Click(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
-            _slideDirection = 1;
-            musicService.PreviousTrack();
+            _playbackUiController.PreviousButtonClick();
         }
 
         private void DiagnosticsButton_Click(object sender, RoutedEventArgs e)
@@ -2067,127 +796,72 @@ namespace DynamicIslandPC
 
         private void InitializeTrayIcon()
         {
-            trayIcon = new System.Windows.Forms.NotifyIcon();
-            
-            try
+            _trayMenuController = new TrayMenuController(new TrayMenuCallbacks
             {
-                var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-                if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
-                {
-                    trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
-                }
-                else
-                {
-                    trayIcon.Icon = System.Drawing.SystemIcons.Application;
-                }
-            }
-            catch
-            {
-                trayIcon.Icon = System.Drawing.SystemIcons.Application;
-            }
-            
-            trayIcon.Text = "Dynamic Island PC";
-            trayIcon.Visible = true;
-            
-            var contextMenu = new System.Windows.Forms.ContextMenuStrip();
-            
-            var positionMenu = new System.Windows.Forms.ToolStripMenuItem("Позиция");
-            var topItem = new System.Windows.Forms.ToolStripMenuItem("Вверху", null, (s, e) => SetPosition(true)) { Checked = true };
-            var bottomItem = new System.Windows.Forms.ToolStripMenuItem("Внизу", null, (s, e) => SetPosition(false));
-            var customItem = new System.Windows.Forms.ToolStripMenuItem("Настройки позиции...", null, (s, e) => OpenSettings());
-            positionMenu.DropDownItems.Add(topItem);
-            positionMenu.DropDownItems.Add(bottomItem);
-            positionMenu.DropDownItems.Add(customItem);
-            contextMenu.Items.Add(positionMenu);
-            
-            var themeMenu = new System.Windows.Forms.ToolStripMenuItem("Тема");
-            var darkItem = new System.Windows.Forms.ToolStripMenuItem("Тёмная", null, (s, e) => SetTheme(true)) { Checked = true };
-            var lightItem = new System.Windows.Forms.ToolStripMenuItem("Светлая", null, (s, e) => SetTheme(false));
-            themeMenu.DropDownItems.Add(darkItem);
-            themeMenu.DropDownItems.Add(lightItem);
-            contextMenu.Items.Add(themeMenu);
-            
-            var scaleMenu = new System.Windows.Forms.ToolStripMenuItem("Масштаб");
-            var scale100 = new System.Windows.Forms.ToolStripMenuItem("100%", null, (s, e) => SetScale(1.0)) { Checked = true };
-            var scale125 = new System.Windows.Forms.ToolStripMenuItem("125%", null, (s, e) => SetScale(1.25));
-            var scale150 = new System.Windows.Forms.ToolStripMenuItem("150%", null, (s, e) => SetScale(1.5));
-            scaleMenu.DropDownItems.Add(scale100);
-            scaleMenu.DropDownItems.Add(scale125);
-            scaleMenu.DropDownItems.Add(scale150);
-            contextMenu.Items.Add(scaleMenu);
-
-            var gamingModeItem = new System.Windows.Forms.ToolStripMenuItem("Игровой режим (клики насквозь)", null, (s, e) => SetGamingMode(!gamingModeEnabled))
-            {
-                CheckOnClick = false,
-                Checked = gamingModeEnabled
-            };
-            contextMenu.Items.Add(gamingModeItem);
-
-            var lockModeItem = new System.Windows.Forms.ToolStripMenuItem("Зафиксировать размер (без клика)", null, (s, e) => SetLockMode(!lockModeEnabled))
-            {
-                CheckOnClick = false,
-                Checked = lockModeEnabled
-            };
-            contextMenu.Items.Add(lockModeItem);
-
-            var startupItem = new System.Windows.Forms.ToolStripMenuItem("Автозапуск с Windows", null, (s, e) => SetStartWithWindows(!startWithWindowsEnabled))
-            {
-                CheckOnClick = false,
-                Checked = startWithWindowsEnabled
-            };
-            contextMenu.Items.Add(startupItem);
-
-            var sourcesMenu = new System.Windows.Forms.ToolStripMenuItem("Источники");
-            var browserSourceItem = new System.Windows.Forms.ToolStripMenuItem("Браузер", null, (s, e) => SetBrowserSourceEnabled(!browserSourceEnabled))
-            {
-                CheckOnClick = false,
-                Checked = browserSourceEnabled
-            };
-            sourcesMenu.DropDownItems.Add(browserSourceItem);
-            contextMenu.Items.Add(sourcesMenu);
-
-            trayPositionTopItem = topItem;
-            trayPositionBottomItem = bottomItem;
-            trayPositionCustomItem = customItem;
-            trayThemeDarkItem = darkItem;
-            trayThemeLightItem = lightItem;
-            trayScale100Item = scale100;
-            trayScale125Item = scale125;
-            trayScale150Item = scale150;
-            trayGamingItem = gamingModeItem;
-            trayLockItem = lockModeItem;
-            trayStartupItem = startupItem;
-            trayBrowserItem = browserSourceItem;
-
-            var controllerMenu = new System.Windows.Forms.ToolStripMenuItem("Управление музыкой");
-            trayTrackItem = new System.Windows.Forms.ToolStripMenuItem("Нет медиа") { Enabled = false };
-            var prevItem = new System.Windows.Forms.ToolStripMenuItem("Предыдущий трек", null, (s, e) => musicService?.PreviousTrack());
-            trayPlayPauseItem = new System.Windows.Forms.ToolStripMenuItem("Воспроизведение / Пауза", null, (s, e) => musicService?.TogglePlayPause());
-            var nextItem = new System.Windows.Forms.ToolStripMenuItem("Следующий трек", null, (s, e) => musicService?.NextTrack());
-            controllerMenu.DropDownItems.Add(trayTrackItem);
-            controllerMenu.DropDownItems.Add(new System.Windows.Forms.ToolStripSeparator());
-            controllerMenu.DropDownItems.Add(prevItem);
-            controllerMenu.DropDownItems.Add(trayPlayPauseItem);
-            controllerMenu.DropDownItems.Add(nextItem);
-            contextMenu.Items.Add(controllerMenu);
-
-            contextMenu.Items.Add("Диагностика...", null, (s, e) => OpenDiagnostics());
-            contextMenu.Items.Add("Проверить обновления...", null, async (s, e) => await CheckForUpdatesAsync());
-            
-            contextMenu.Items.Add("Выход", null, (s, e) => 
-            {
-                trayIcon.Visible = false;
-                Application.Current.Shutdown();
+                OpenSettings = OpenSettings,
+                OpenDiagnostics = OpenDiagnostics,
+                CheckForUpdatesAsync = CheckForUpdatesAsync,
+                ExitApplication = () => Application.Current.Shutdown(),
+                SetPosition = SetPosition,
+                SetScale = SetScale,
+                SetTheme = dark => SetTheme(dark),
+                SetGamingMode = SetGamingMode,
+                SetLockMode = SetLockMode,
+                SetStartup = SetStartWithWindows,
+                SetBrowserSource = SetBrowserSourceEnabled,
+                SetDisableAlbumArt = SetDisableAlbumArtForDiagnostics,
+                PreviousTrackAsync = () => musicService?.PreviousTrackAsync() ?? Task.CompletedTask,
+                PlayPauseAsync = () => musicService?.TogglePlayPauseAsync() ?? Task.CompletedTask,
+                NextTrackAsync = () => musicService?.NextTrackAsync() ?? Task.CompletedTask
             });
-            trayIcon.ContextMenuStrip = contextMenu;
-            SyncTrayMenuState();
+            _trayMenuController.Initialize(CreateTrayMenuState());
+        }
+
+        private TrayMenuState CreateTrayMenuState(MusicInfo musicInfo = null)
+        {
+            var current = musicInfo ?? lastMusicInfo;
+            var title = string.IsNullOrWhiteSpace(current?.Title) ? "Нет медиа" : current.Title;
+            var artist = string.IsNullOrWhiteSpace(current?.Artist) ? current?.SourceApp : current.Artist;
+            return new TrayMenuState
+            {
+                TrackText = string.IsNullOrWhiteSpace(artist) ? title : $"{title} - {artist}",
+                IsPlaying = current?.IsPlaying == true,
+                IsTopPosition = isTopPosition,
+                HasCustomPosition = hasCustomPosition,
+                IsDarkTheme = isDarkTheme,
+                Scale = scale,
+                GamingModeEnabled = gamingModeEnabled,
+                LockModeEnabled = lockModeEnabled,
+                StartWithWindowsEnabled = startWithWindowsEnabled,
+                BrowserSourceEnabled = browserSourceEnabled,
+                DisableAlbumArtForDiagnostics = DisableAlbumArtForDiagnostics
+            };
         }
 
         private void OpenDiagnostics()
         {
-            var diagnosticsWindow = new DiagnosticsWindow(() => musicService?.GetDiagnostics() ?? "Music service is not initialized.");
+            var diagnosticsWindow = new DiagnosticsWindow(GetApplicationDiagnostics);
             diagnosticsWindow.Owner = this;
             diagnosticsWindow.Show();
+        }
+
+        private string GetApplicationDiagnostics()
+        {
+            using var process = Process.GetCurrentProcess();
+            var gcInfo = GC.GetGCMemoryInfo();
+            var bytesPerMegabyte = 1024d * 1024d;
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Process memory");
+            sb.AppendLine($"Working Set: {process.WorkingSet64 / bytesPerMegabyte:F1} MB");
+            sb.AppendLine($"Private Bytes: {process.PrivateMemorySize64 / bytesPerMegabyte:F1} MB");
+            sb.AppendLine($"Managed Heap: {GC.GetTotalMemory(false) / bytesPerMegabyte:F1} MB");
+            sb.AppendLine($"GC heap size: {gcInfo.HeapSizeBytes / bytesPerMegabyte:F1} MB");
+            sb.AppendLine($"GC fragmented: {gcInfo.FragmentedBytes / bytesPerMegabyte:F1} MB");
+            sb.AppendLine($"Gen 0 / 1 / 2 collections: {GC.CollectionCount(0)} / {GC.CollectionCount(1)} / {GC.CollectionCount(2)}");
+            sb.AppendLine($"Album art diagnostics disabled: {DisableAlbumArtForDiagnostics}");
+            sb.AppendLine();
+            sb.Append(musicService?.GetDiagnostics() ?? "Music service is not initialized.");
+            return sb.ToString();
         }
 
         private async Task CheckForUpdatesAsync()
@@ -2279,21 +953,14 @@ namespace DynamicIslandPC
         
         private void OnMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (e.Delta > 0)
-            {
-                musicService.PreviousTrack();
-            }
-            else if (e.Delta < 0)
-            {
-                musicService.NextTrack();
-            }
+            _playbackUiController.HandleWheel(e.Delta);
         }
         
         private void OnMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ChangedButton == MouseButton.Middle)
             {
-                musicService.TogglePlayPause();
+                _playbackUiController.HandleMiddleClick();
                 e.Handled = true;
             }
         }
@@ -2370,7 +1037,7 @@ namespace DynamicIslandPC
         {
             while (dep != null && dep is not Window)
             {
-                if (dep is Button || dep is System.Windows.Controls.Primitives.ButtonBase || dep is TextBox)
+                if (dep is Button || dep is System.Windows.Controls.Primitives.ButtonBase || dep is TextBox || dep is Slider)
                     return true;
                 if (dep is FrameworkElement fe && (fe.Name.StartsWith("AlbumArt") || fe.Name.StartsWith("Vinyl") || fe.Name == "ProgressContainerCompact" || fe.Name == "ProgressContainerExpanded"))
                     return true;
@@ -2381,68 +1048,48 @@ namespace DynamicIslandPC
 
         private void ProgressContainer_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (sender is Grid grid && lastMusicInfo != null && lastMusicInfo.Duration > TimeSpan.Zero)
+            if (sender is Grid grid)
             {
-                _isScrubbing = true;
-                _activeScrubberContainer = grid;
-                grid.CaptureMouse();
-                e.Handled = true;
-                HandleScrub(grid, e.GetPosition(grid).X, commit: false);
+                _playbackUiController.ProgressMouseDown(grid, e.GetPosition(grid).X);
+                if (_playbackUiController.IsScrubbing) e.Handled = true;
             }
         }
 
         private void ProgressContainer_MouseMove(object sender, MouseEventArgs e)
         {
-            if (_isScrubbing && _activeScrubberContainer != null && e.LeftButton == MouseButtonState.Pressed)
+            if (sender is Grid grid)
             {
-                HandleScrub(_activeScrubberContainer, e.GetPosition(_activeScrubberContainer).X, commit: false);
-                e.Handled = true;
+                _playbackUiController.ProgressMouseMove(e.GetPosition(grid).X, e.LeftButton == MouseButtonState.Pressed);
+                if (_playbackUiController.IsScrubbing) e.Handled = true;
             }
         }
 
         private void ProgressContainer_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (_isScrubbing && _activeScrubberContainer != null)
+            if (sender is Grid grid)
             {
-                _activeScrubberContainer.ReleaseMouseCapture();
-                HandleScrub(_activeScrubberContainer, e.GetPosition(_activeScrubberContainer).X, commit: true);
-                _isScrubbing = false;
-                _activeScrubberContainer = null;
+                _playbackUiController.ProgressMouseUp(e.GetPosition(grid).X);
                 e.Handled = true;
             }
         }
 
         private void ProgressContainer_LostMouseCapture(object sender, MouseEventArgs e)
         {
-            if (_isScrubbing)
-            {
-                _isScrubbing = false;
-                _activeScrubberContainer = null;
-            }
+            _playbackUiController.ProgressLostMouseCapture();
         }
 
-        private void HandleScrub(Grid container, double mouseX, bool commit = false)
+        private void SystemVolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (lastMusicInfo == null || lastMusicInfo.Duration <= TimeSpan.Zero) return;
-            double width = container.ActualWidth;
-            if (width <= 0) return;
+            if (!_updatingSystemVolumeSlider && _systemVolumeService != null)
+                _systemVolumeService.SetVolume(e.NewValue);
+        }
 
-            double ratio = Math.Clamp(mouseX / width, 0.0, 1.0);
-            SetProgressRatio(ratio);
-
-            var newPos = TimeSpan.FromSeconds(ratio * lastMusicInfo.Duration.TotalSeconds);
-            lastMusicInfo.Position = newPos;
-            CurrentTimeText.Text = FormatTime(newPos);
-            var remaining = lastMusicInfo.Duration - newPos;
-            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
-            TotalTimeText.Text = "-" + FormatTime(remaining);
-
-            if (commit)
-            {
-                _lastSeekTime = DateTime.UtcNow;
-                _lastProgressTickTime = DateTime.UtcNow;
-                _ = musicService.SeekToPositionAsync(newPos);
-            }
+        private void UpdateSystemVolumeSlider(double percent)
+        {
+            if (_isClosing) return;
+            _updatingSystemVolumeSlider = true;
+            try { SystemVolumeSlider.Value = Math.Clamp(percent, 0.0, 100.0); }
+            finally { _updatingSystemVolumeSlider = false; }
         }
 
         public static void TrimMemory()
@@ -2457,495 +1104,98 @@ namespace DynamicIslandPC
             });
         }
 
-        private double _breathingScale = 1.0;
-        private double _artBreathingScale = 1.0;
-
         private void RenderVisualizer()
         {
-            _visualizerUpdatePending = false;
+            Interlocked.Exchange(ref _visualizerUpdatePending, 0);
 
-            if (visualizerSkin == 0) // Classic Bars
-            {
-                UpdateIndicatorBars(PlaybackIndicatorMinimal, _band0, _band1, _band2, _band3, 4, 18);
-                UpdateIndicatorBars(PlaybackIndicatorCompact, _band0, _band1, _band2, _band3, 4, 18);
-                UpdateIndicatorBars(PlaybackIndicatorExpanded, _band0, _band1, _band2, _band3, 4, 20);
-            }
-            else if (visualizerSkin == 1) // Halo Ring
-            {
-                UpdateHaloRing(_band0, _band1, _band2, _band3);
-            }
-            else if (visualizerSkin == 2) // Fluid Dots
-            {
-                UpdateIndicatorDots(PlaybackIndicatorMinimal, _band0, _band1, _band2, _band3, 11);
-                UpdateIndicatorDots(PlaybackIndicatorCompact, _band0, _band1, _band2, _band3, 11);
-                UpdateIndicatorDots(PlaybackIndicatorExpanded, _band0, _band1, _band2, _band3, 13);
-            }
-            else if (visualizerSkin == 3) // Combo (Halo + Bars)
-            {
-                UpdateIndicatorBars(PlaybackIndicatorMinimal, _band0, _band1, _band2, _band3, 4, 18);
-                UpdateIndicatorBars(PlaybackIndicatorCompact, _band0, _band1, _band2, _band3, 4, 18);
-                UpdateIndicatorBars(PlaybackIndicatorExpanded, _band0, _band1, _band2, _band3, 4, 20);
-                UpdateHaloRing(_band0, _band1, _band2, _band3);
-            }
+            if (_isClosing || _audioVisualizer?.IsEnabled != true || !IsVisible ||
+                lastMusicInfo?.IsPlaying != true)
+                return;
 
-            if (audioReactiveBreathingEnabled && !_isPeekingDrop)
-            {
-                ApplyAudioBreathing(_band0, _band1, _band2, _band3);
-            }
-        }
-
-        private void ApplyAudioBreathing(float b0, float b1, float b2, float b3)
-        {
-            if (IslandBorderScale == null) return;
-
-            // Full-spectrum dynamic energy mix with boosted high-frequency accent:
-            // Highs (b3: 32%), Mids (b2: 26%), Low-Mid (b1: 18%), Bass (b0: 24%)
-            float totalEnergy = Math.Clamp(b0 * 0.24f + b1 * 0.18f + b2 * 0.26f + b3 * 0.32f, 0f, 1f);
-
-            // Bounded to <= 1.000 so the capsule never clips against the OS window boundary!
-            double targetScale = 0.970 + Math.Min(0.030, totalEnergy * 0.030);
-            if (targetScale > _breathingScale)
-                _breathingScale = _breathingScale * 0.45 + targetScale * 0.55; // responsive attack
-            else
-                _breathingScale = _breathingScale * 0.76 + targetScale * 0.24; // smooth organic decay
-
-            _breathingScale = Math.Min(1.0, _breathingScale);
-
-            if (Math.Abs(IslandBorderScale.ScaleX - _breathingScale) > 0.0004)
-            {
-                IslandBorderScale.ScaleX = _breathingScale;
-                IslandBorderScale.ScaleY = _breathingScale;
-            }
-
-            // Punchy album art vinyl & custom decoration pop:
-            double artTarget = 1.0 + Math.Min(0.075, totalEnergy * 0.075);
-            if (artTarget > _artBreathingScale)
-                _artBreathingScale = _artBreathingScale * 0.40 + artTarget * 0.60;
-            else
-                _artBreathingScale = _artBreathingScale * 0.74 + artTarget * 0.26;
-
-            SetScale(AlbumArtMinimalScale, _artBreathingScale);
-            SetScale(AlbumArtScale, _artBreathingScale);
-            SetScale(AlbumArtExpandedScale, _artBreathingScale);
-            SetScale(GifMinimalScale, _artBreathingScale);
-            SetScale(GifCompactScale, _artBreathingScale);
-            SetScale(GifExpandedScale, _artBreathingScale);
-        }
-
-        private static void SetScale(ScaleTransform transform, double scale)
-        {
-            if (transform != null && Math.Abs(transform.ScaleX - scale) > 0.0005)
-            {
-                transform.ScaleX = scale;
-                transform.ScaleY = scale;
-            }
-        }
-
-        private void ResetBreathing()
-        {
-            _breathingScale = 1.0;
-            _artBreathingScale = 1.0;
-            if (IslandBorderScale != null)
-            {
-                IslandBorderScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                IslandBorderScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                IslandBorderScale.ScaleX = 1.0;
-                IslandBorderScale.ScaleY = 1.0;
-            }
-            SetScale(AlbumArtMinimalScale, 1.0);
-            SetScale(AlbumArtScale, 1.0);
-            SetScale(AlbumArtExpandedScale, 1.0);
-            SetScale(GifMinimalScale, 1.0);
-            SetScale(GifCompactScale, 1.0);
-            SetScale(GifExpandedScale, 1.0);
-        }
-
-        private static void UpdateIndicatorBars(StackPanel indicator, float b0, float b1, float b2, float b3, double minH, double maxH)
-        {
-            if (indicator == null || indicator.Visibility != Visibility.Visible) return;
-            var children = indicator.Children;
-            if (children.Count < 4) return;
-
-            double range = maxH - minH;
-            SetBarHeight(children[0], minH + b0 * range);
-            SetBarHeight(children[1], minH + b1 * range);
-            SetBarHeight(children[2], minH + b2 * range);
-            SetBarHeight(children[3], minH + b3 * range);
-        }
-
-        private static void SetBarHeight(UIElement element, double height)
-        {
-            if (element is System.Windows.Shapes.Rectangle rect)
-            {
-                if (rect.VerticalAlignment != VerticalAlignment.Center)
-                {
-                    rect.VerticalAlignment = VerticalAlignment.Center;
-                }
-                if (Math.Abs(rect.Width - 3.0) > 0.1)
-                {
-                    rect.Width = 3.0;
-                    rect.RadiusX = 1.5;
-                    rect.RadiusY = 1.5;
-                }
-                if (rect.RenderTransform is TranslateTransform tt && Math.Abs(tt.Y) > 0.01)
-                {
-                    tt.Y = 0;
-                }
-                if (Math.Abs(rect.Height - height) > 0.4)
-                {
-                    rect.Height = height;
-                }
-            }
+            float band0 = Volatile.Read(ref _pendingBand0);
+            float band1 = Volatile.Read(ref _pendingBand1);
+            float band2 = Volatile.Read(ref _pendingBand2);
+            float band3 = Volatile.Read(ref _pendingBand3);
+            _visualizerRenderer.Render(visualizerSkin, audioReactiveBreathingEnabled, _isPeekingDrop,
+                GetDisplayModeGrid(), band0, band1, band2, band3);
         }
 
         private void ApplyVisualizerSkin(int skin)
         {
             visualizerSkin = Math.Clamp(skin, 0, 3);
-            bool isPlaying = lastMusicInfo != null && lastMusicInfo.IsPlaying;
-
-            if (visualizerSkin == 1) // Halo Ring only
+            _visualizerRenderer.ApplySkin(visualizerSkin, lastMusicInfo?.IsPlaying == true);
+            if (lastMusicInfo?.IsPlaying == true)
             {
-                SetIndicatorVisibility(PlaybackIndicatorMinimal, Visibility.Collapsed);
-                SetIndicatorVisibility(PlaybackIndicatorCompact, Visibility.Collapsed);
-                SetIndicatorVisibility(PlaybackIndicatorExpanded, Visibility.Collapsed);
-                SetHaloOpacity(isPlaying ? 0.45 : 0);
-            }
-            else if (visualizerSkin == 2) // Fluid Dots
-            {
-                SetHaloOpacity(0);
-                ResetBarsGeometry(PlaybackIndicatorMinimal);
-                ResetBarsGeometry(PlaybackIndicatorCompact);
-                ResetBarsGeometry(PlaybackIndicatorExpanded);
-                var vis = isPlaying ? Visibility.Visible : Visibility.Collapsed;
-                SetIndicatorVisibility(PlaybackIndicatorMinimal, vis);
-                SetIndicatorVisibility(PlaybackIndicatorCompact, vis);
-                SetIndicatorVisibility(PlaybackIndicatorExpanded, vis);
-            }
-            else // 0 (Classic Bars) or 3 (Combo)
-            {
-                if (visualizerSkin == 0) SetHaloOpacity(0);
-                else SetHaloOpacity(isPlaying ? 0.45 : 0);
-
-                ResetBarsGeometry(PlaybackIndicatorMinimal);
-                ResetBarsGeometry(PlaybackIndicatorCompact);
-                ResetBarsGeometry(PlaybackIndicatorExpanded);
-                var vis = isPlaying ? Visibility.Visible : Visibility.Collapsed;
-                SetIndicatorVisibility(PlaybackIndicatorMinimal, vis);
-                SetIndicatorVisibility(PlaybackIndicatorCompact, vis);
-                SetIndicatorVisibility(PlaybackIndicatorExpanded, vis);
-            }
-
-            if (isPlaying)
-            {
-                _visualizerUpdatePending = false;
+                Interlocked.Exchange(ref _visualizerUpdatePending, 0);
                 RenderVisualizer();
             }
         }
 
         private void UpdateIndicatorsVisibility(bool isPlaying)
         {
-            bool showBars = isPlaying && (visualizerSkin != 1);
-            var barVis = showBars ? Visibility.Visible : Visibility.Collapsed;
-            SetIndicatorVisibility(PlaybackIndicatorMinimal, barVis);
-            SetIndicatorVisibility(PlaybackIndicatorCompact, barVis);
-            SetIndicatorVisibility(PlaybackIndicatorExpanded, barVis);
-
-            if (!isPlaying || (visualizerSkin != 1 && visualizerSkin != 3))
-            {
-                SetHaloOpacity(0);
-            }
-            else
-            {
-                SetHaloOpacity(0.45);
-            }
+            _visualizerRenderer.UpdateIndicatorsVisibility(isPlaying, visualizerSkin);
         }
 
-        private static void SetIndicatorVisibility(UIElement element, Visibility visibility)
+        private void ResetBreathing()
         {
-            if (element != null && element.Visibility != visibility)
-            {
-                element.Visibility = visibility;
-            }
-        }
-
-        private void UpdateHaloRing(float b0, float b1, float b2, float b3)
-        {
-            float bassEnergy = Math.Clamp(b0 * 0.65f + b1 * 0.40f + b2 * 0.20f, 0f, 1f);
-            double opacity = 0.35 + bassEnergy * 0.65;
-            double thickness = 1.3 + bassEnergy * 0.9;
-            double blur = 14.0 + bassEnergy * 14.0;
-
-            ApplyHalo(VinylHaloMinimal, opacity, thickness, blur);
-            ApplyHalo(VinylHaloCompact, opacity, thickness, blur);
-            ApplyHalo(VinylHaloExpanded, opacity, thickness + 0.3, blur + 5.0);
-        }
-
-        private static void ApplyHalo(System.Windows.Shapes.Ellipse halo, double opacity, double thickness, double blur)
-        {
-            if (halo == null) return;
-            halo.Opacity = opacity;
-            halo.StrokeThickness = thickness;
-            if (halo.Effect is System.Windows.Media.Effects.DropShadowEffect dse)
-            {
-                dse.BlurRadius = blur;
-                dse.Opacity = Math.Min(1.0, opacity + 0.15);
-            }
+            _visualizerRenderer.Reset();
         }
 
         private void SetHaloOpacity(double opacity)
         {
-            if (VinylHaloMinimal != null) VinylHaloMinimal.Opacity = opacity;
-            if (VinylHaloCompact != null) VinylHaloCompact.Opacity = opacity;
-            if (VinylHaloExpanded != null) VinylHaloExpanded.Opacity = opacity;
+            _visualizerRenderer.SetHaloOpacity(opacity);
         }
 
-        private static void UpdateIndicatorDots(StackPanel indicator, float b0, float b1, float b2, float b3, double bounceRange)
-        {
-            if (indicator == null || indicator.Visibility != Visibility.Visible) return;
-            var children = indicator.Children;
-            if (children.Count < 4) return;
-
-            SetDotBounce(children[0], b0, bounceRange);
-            SetDotBounce(children[1], b1, bounceRange);
-            SetDotBounce(children[2], b2, bounceRange);
-            SetDotBounce(children[3], b3, bounceRange);
-        }
-
-        private static void SetDotBounce(UIElement element, float band, double bounceRange)
-        {
-            if (element is System.Windows.Shapes.Rectangle rect)
-            {
-                if (rect.VerticalAlignment != VerticalAlignment.Bottom)
-                {
-                    rect.VerticalAlignment = VerticalAlignment.Bottom;
-                }
-                if (Math.Abs(rect.Width - 4.5) > 0.1 || Math.Abs(rect.Height - 4.5) > 0.1)
-                {
-                    rect.Width = 4.5;
-                    rect.Height = 4.5;
-                    rect.RadiusX = 2.25;
-                    rect.RadiusY = 2.25;
-                }
-
-                if (rect.RenderTransform is not TranslateTransform tt)
-                {
-                    tt = new TranslateTransform();
-                    rect.RenderTransform = tt;
-                }
-
-                double targetY = -Math.Clamp(band * bounceRange, 0.0, bounceRange);
-                if (Math.Abs(tt.Y - targetY) > 0.2)
-                {
-                    tt.Y = targetY;
-                }
-            }
-        }
-
-        private static void ResetBarsGeometry(Panel panel)
-        {
-            if (panel == null) return;
-            foreach (var child in panel.Children)
-            {
-                if (child is System.Windows.Shapes.Rectangle rect)
-                {
-                    rect.VerticalAlignment = VerticalAlignment.Center;
-                    rect.Width = 3.0;
-                    rect.RadiusX = 1.5;
-                    rect.RadiusY = 1.5;
-                    if (rect.RenderTransform is TranslateTransform tt)
-                    {
-                        tt.Y = 0;
-                    }
-                }
-            }
-        }
 
         private void OnVinylMouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (!vinylScratchEnabled)
+            if (sender is FrameworkElement element)
             {
-                musicService.TogglePlayPause();
-                e.Handled = true;
-                return;
-            }
-
-            if (sender is FrameworkElement fe)
-            {
-                _isScratchingVinyl = true;
-                _activeScratchContainer = fe;
-                fe.CaptureMouse();
-                _scratchCenter = new Point(fe.ActualWidth / 2.0, fe.ActualHeight / 2.0);
-                Point pos = e.GetPosition(fe);
-                _lastScratchVector = pos - _scratchCenter;
-                _accumulatedAngleDelta = 0;
-                _scratchDragTraveled = 0;
-
-                _scratchBaseVinylAngle = AlbumArtRotation?.Angle
-                    ?? AlbumArtMinimalRotation?.Angle
-                    ?? AlbumArtExpandedRotation?.Angle
-                    ?? 0;
-                _currentVinylManualAngle = _scratchBaseVinylAngle;
-                DetachVinylClocksForScratch(_currentVinylManualAngle);
-
-                _scratchBasePosition = lastMusicInfo?.Position ?? TimeSpan.Zero;
-                _scratchCurrentPosition = _scratchBasePosition;
-                _scratchWasPlaying = lastMusicInfo?.IsPlaying ?? false;
-                _isScrubbing = true;
+                _playbackUiController.VinylMouseDown(element, e.GetPosition(element));
                 e.Handled = true;
             }
         }
 
         private void OnVinylMouseMove(object sender, MouseEventArgs e)
         {
-            if (!_isScratchingVinyl || _activeScratchContainer == null) return;
-            if (e.LeftButton != MouseButtonState.Pressed)
-            {
-                EndVinylScratch(commit: true);
-                return;
-            }
-
-            Point pos = e.GetPosition(_activeScratchContainer);
-            Vector currentVec = pos - _scratchCenter;
-            if (currentVec.Length < 3.0) return;
-
-            double a1 = Math.Atan2(_lastScratchVector.Y, _lastScratchVector.X);
-            double a2 = Math.Atan2(currentVec.Y, currentVec.X);
-            double dAngle = a2 - a1;
-            while (dAngle > Math.PI) dAngle -= 2 * Math.PI;
-            while (dAngle < -Math.PI) dAngle += 2 * Math.PI;
-
-            _accumulatedAngleDelta += dAngle;
-            _scratchDragTraveled += Math.Abs(dAngle);
-            _lastScratchVector = currentVec;
-
-            double deg = dAngle * (180.0 / Math.PI);
-            _currentVinylManualAngle += deg;
-            SetVinylManualAngle(_currentVinylManualAngle);
-
-            if (lastMusicInfo != null && lastMusicInfo.Duration > TimeSpan.Zero)
-            {
-                double secondsPerRev = 15.0; // 1 full spin = 15 seconds seek
-                double secDelta = (_accumulatedAngleDelta / (2 * Math.PI)) * secondsPerRev;
-                double targetSec = Math.Clamp(_scratchBasePosition.TotalSeconds + secDelta, 0.0, lastMusicInfo.Duration.TotalSeconds);
-                _scratchCurrentPosition = TimeSpan.FromSeconds(targetSec);
-                lastMusicInfo.Position = _scratchCurrentPosition;
-                SetProgressRatio(_scratchCurrentPosition.TotalSeconds / lastMusicInfo.Duration.TotalSeconds);
-                CurrentTimeText.Text = FormatTime(_scratchCurrentPosition);
-                var remaining = lastMusicInfo.Duration - _scratchCurrentPosition;
-                if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
-                TotalTimeText.Text = "-" + FormatTime(remaining);
-            }
-            e.Handled = true;
+            if (sender is FrameworkElement element)
+                _playbackUiController.VinylMouseMove(e.GetPosition(element), e.LeftButton == MouseButtonState.Pressed);
         }
 
         private void OnVinylMouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (_isScratchingVinyl)
-            {
-                EndVinylScratch(commit: true);
-                e.Handled = true;
-            }
+            _playbackUiController.VinylMouseUp(commit: true);
+            e.Handled = true;
         }
 
         private void OnVinylLostMouseCapture(object sender, MouseEventArgs e)
         {
-            if (_isScratchingVinyl)
-            {
-                EndVinylScratch(commit: false);
-            }
-        }
-
-        private void DetachVinylClocksForScratch(double currentAngle)
-        {
-            if (_vinylClock != null)
-            {
-                try
-                {
-                    _vinylClock.Controller?.Stop();
-                }
-                catch { }
-                _vinylClock = null;
-            }
-            _isVinylSpinning = false;
-
-            void Detach(RotateTransform rt)
-            {
-                if (rt != null)
-                {
-                    rt.ApplyAnimationClock(RotateTransform.AngleProperty, null);
-                    rt.Angle = currentAngle;
-                }
-            }
-            Detach(AlbumArtMinimalRotation);
-            Detach(AlbumArtRotation);
-            Detach(AlbumArtExpandedRotation);
-            Detach(AlbumArtOldRotation);
-            Detach(AlbumArtExpandedOldRotation);
-        }
-
-        private void SetVinylManualAngle(double angle)
-        {
-            void SetAngle(RotateTransform rt)
-            {
-                if (rt != null) rt.Angle = angle;
-            }
-            SetAngle(AlbumArtMinimalRotation);
-            SetAngle(AlbumArtRotation);
-            SetAngle(AlbumArtExpandedRotation);
-            SetAngle(AlbumArtOldRotation);
-            SetAngle(AlbumArtExpandedOldRotation);
-        }
-
-        private void EndVinylScratch(bool commit)
-        {
-            if (!_isScratchingVinyl) return;
-            _isScratchingVinyl = false;
-
-            if (_activeScratchContainer != null)
-            {
-                try
-                {
-                    _activeScratchContainer.ReleaseMouseCapture();
-                }
-                catch { }
-                _activeScratchContainer = null;
-            }
-
-            _isScrubbing = false;
-
-            if (_scratchDragTraveled < 0.10)
-            {
-                musicService.TogglePlayPause();
-            }
-            else if (commit && lastMusicInfo != null && lastMusicInfo.Duration > TimeSpan.Zero)
-            {
-                _lastSeekTime = DateTime.UtcNow;
-                _lastProgressTickTime = DateTime.UtcNow;
-                _ = musicService.SeekToPositionAsync(_scratchCurrentPosition);
-            }
-
-            if (vinylRotationEnabled && (lastMusicInfo?.IsPlaying ?? false))
-            {
-                StartRotation(_currentVinylManualAngle);
-            }
+            _playbackUiController.VinylMouseUp(commit: false);
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            var helper = new System.Windows.Interop.WindowInteropHelper(this);
-            if (helper.Handle != IntPtr.Zero)
-            {
-                var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
-                source?.RemoveHook(HwndHook);
-                UnregisterHotKey(helper.Handle, HOTKEY_ID);
-            }
-            _audioVisualizer?.Dispose();
-            _progressTimer?.Stop();
+            _isClosing = true;
+            _startupTrimTimer?.Stop();
+            _startupTrimTimer = null;
+            _saveSettingsDebounceTimer?.Stop();
             _pauseDebounceTimer?.Stop();
-            _topmostWatchdogTimer?.Stop();
-            StopTitleMarquee();
+            _pauseDebounceTimer = null;
+            if (_audioVisualizer != null)
+                _audioVisualizer.BandsUpdated -= OnVisualizerBandsUpdated;
+            Interlocked.Exchange(ref _visualizerUpdatePending, 0);
+            _audioVisualizer?.Dispose();
+            _systemVolumeService?.Dispose();
+            _islandModeController?.Dispose();
+            _playbackUiController?.Dispose();
+            _decorationController?.Dispose();
+            _albumArtPresenter?.Dispose();
+            _smartVisibilityController?.Dispose();
+            _windowChromeController?.Dispose();
+            _trackTextPresenter?.Dispose();
+            musicService?.Dispose();
             SaveSettings();
-            trayIcon?.Dispose();
+            _trayMenuController?.Dispose();
             base.OnClosed(e);
         }
     }

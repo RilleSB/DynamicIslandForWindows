@@ -10,8 +10,10 @@ namespace DynamicIslandPC
     {
         private WasapiLoopbackCapture capture;
         private readonly object syncRoot = new();
+        private readonly SemaphoreSlim captureLifecycle = new(1, 1);
         private bool isRunning;
         private bool isDisposed;
+        private int _dataProcessingErrorLogged;
 
         private const int FftSize = 512;
         private static readonly double[] HannWindow = PrecomputeHannWindow();
@@ -45,97 +47,156 @@ namespace DynamicIslandPC
             return window;
         }
 
-        public void Start()
+        public async Task StartAsync()
         {
             if (!IsEnabled || isDisposed)
                 return;
 
-            WasapiLoopbackCapture toDispose = null;
-            lock (syncRoot)
+            await captureLifecycle.WaitAsync().ConfigureAwait(false);
+            try
             {
-                if (isRunning || isDisposed)
-                    return;
-
-                if (capture != null)
+                WasapiLoopbackCapture previousCapture;
+                lock (syncRoot)
                 {
-                    capture.DataAvailable -= OnDataAvailable;
-                    toDispose = capture;
-                    capture = null;
+                    if (isRunning || isDisposed)
+                        return;
+
+                    previousCapture = DetachCaptureUnsafe();
                 }
 
+                if (previousCapture != null)
+                    await Task.Run(() => StopAndDisposeCapture(previousCapture)).ConfigureAwait(false);
+
+                WasapiLoopbackCapture newCapture = null;
                 try
                 {
-                    var newCapture = new WasapiLoopbackCapture();
-                    newCapture.DataAvailable += OnDataAvailable;
-                    newCapture.RecordingStopped += (s, e) =>
+                    newCapture = await Task.Run(CreateAndStartCapture).ConfigureAwait(false);
+                    bool disposeNewCapture;
+                    lock (syncRoot)
                     {
-                        lock (syncRoot)
+                        disposeNewCapture = isDisposed;
+                        if (!disposeNewCapture)
                         {
-                            if (object.ReferenceEquals(capture, s))
-                            {
-                                isRunning = false;
-                            }
+                            capture = newCapture;
+                            isRunning = true;
+                            _lastDataTick = Environment.TickCount64;
+                            Interlocked.Exchange(ref _dataProcessingErrorLogged, 0);
                         }
-                    };
-                    newCapture.StartRecording();
-                    capture = newCapture;
-                    isRunning = true;
-                    _lastDataTick = Environment.TickCount64;
+                    }
+
+                    if (disposeNewCapture)
+                    {
+                        await Task.Run(() => StopAndDisposeCapture(newCapture)).ConfigureAwait(false);
+                        return;
+                    }
+
                     StartSilenceWatchdog();
                 }
                 catch (Exception ex)
                 {
                     Logger.Error("Failed to initialize WASAPI loopback audio visualizer", ex);
-                    isRunning = false;
+                    lock (syncRoot)
+                    {
+                        isRunning = false;
+                    }
+
+                    if (newCapture != null)
+                        await Task.Run(() => StopAndDisposeCapture(newCapture)).ConfigureAwait(false);
                 }
             }
-
-            if (toDispose != null)
+            finally
             {
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        toDispose.StopRecording();
-                        toDispose.Dispose();
-                    }
-                    catch { }
-                });
+                captureLifecycle.Release();
             }
         }
 
-        public void Stop()
+        public async Task StopAsync()
         {
-            WasapiLoopbackCapture toDispose = null;
-            lock (syncRoot)
+            await captureLifecycle.WaitAsync().ConfigureAwait(false);
+            try
             {
-                StopSilenceWatchdog();
-
-                if (!isRunning && capture == null)
-                    return;
-
-                isRunning = false;
-                if (capture != null)
+                WasapiLoopbackCapture captureToDispose;
+                lock (syncRoot)
                 {
-                    capture.DataAvailable -= OnDataAvailable;
-                    toDispose = capture;
-                    capture = null;
+                    StopSilenceWatchdog();
+                    isRunning = false;
+                    captureToDispose = DetachCaptureUnsafe();
                 }
                 ResetBands();
+
+                if (captureToDispose != null)
+                    await Task.Run(() => StopAndDisposeCapture(captureToDispose)).ConfigureAwait(false);
+            }
+            finally
+            {
+                captureLifecycle.Release();
+            }
+        }
+
+        private WasapiLoopbackCapture CreateAndStartCapture()
+        {
+            var newCapture = new WasapiLoopbackCapture();
+            newCapture.DataAvailable += OnDataAvailable;
+            newCapture.RecordingStopped += OnRecordingStopped;
+            try
+            {
+                newCapture.StartRecording();
+                return newCapture;
+            }
+            catch
+            {
+                newCapture.DataAvailable -= OnDataAvailable;
+                newCapture.RecordingStopped -= OnRecordingStopped;
+                newCapture.Dispose();
+                throw;
+            }
+        }
+
+        private void OnRecordingStopped(object sender, StoppedEventArgs e)
+        {
+            lock (syncRoot)
+            {
+                if (ReferenceEquals(capture, sender))
+                    isRunning = false;
             }
 
-            if (toDispose != null)
+            if (e.Exception != null)
+                Logger.Error("WASAPI loopback capture stopped unexpectedly", e.Exception);
+        }
+
+        private WasapiLoopbackCapture DetachCaptureUnsafe()
+        {
+            var detachedCapture = capture;
+            capture = null;
+            if (detachedCapture != null)
             {
-                // Dispose outside of syncRoot lock so captureThread.Join() never deadlocks UI
-                Task.Run(() =>
+                detachedCapture.DataAvailable -= OnDataAvailable;
+                detachedCapture.RecordingStopped -= OnRecordingStopped;
+            }
+
+            return detachedCapture;
+        }
+
+        private static void StopAndDisposeCapture(WasapiLoopbackCapture captureToDispose)
+        {
+            try
+            {
+                captureToDispose.StopRecording();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to stop WASAPI loopback capture", ex);
+            }
+            finally
+            {
+                try
                 {
-                    try
-                    {
-                        toDispose.StopRecording();
-                        toDispose.Dispose();
-                    }
-                    catch { }
-                });
+                    captureToDispose.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Failed to dispose WASAPI loopback capture", ex);
+                }
             }
         }
 
@@ -176,12 +237,9 @@ namespace DynamicIslandPC
 
         private void StopSilenceWatchdog()
         {
-            try
-            {
-                silenceTimer?.Dispose();
-                silenceTimer = null;
-            }
-            catch { }
+            var timer = silenceTimer;
+            silenceTimer = null;
+            timer?.Dispose();
         }
 
         public float[] GetSmoothedBands()
@@ -204,7 +262,8 @@ namespace DynamicIslandPC
                     smoothedBands[i] = 0;
                 }
             }
-            BandsUpdated?.Invoke(0f, 0f, 0f, 0f);
+            if (!isDisposed)
+                BandsUpdated?.Invoke(0f, 0f, 0f, 0f);
         }
 
         private void OnDataAvailable(object sender, WaveInEventArgs e)
@@ -214,7 +273,18 @@ namespace DynamicIslandPC
 
             try
             {
-                var waveFormat = capture?.WaveFormat;
+                if (sender is not WasapiLoopbackCapture sourceCapture)
+                    return;
+
+                WaveFormat waveFormat;
+                lock (syncRoot)
+                {
+                    if (!isRunning || !ReferenceEquals(capture, sourceCapture))
+                        return;
+
+                    waveFormat = sourceCapture.WaveFormat;
+                }
+
                 if (waveFormat == null)
                     return;
 
@@ -312,7 +382,11 @@ namespace DynamicIslandPC
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                if (Interlocked.Exchange(ref _dataProcessingErrorLogged, 1) == 0)
+                    Logger.Error("Failed to process WASAPI loopback audio data", ex);
+            }
         }
 
         private void ProcessFft()
@@ -435,11 +509,14 @@ namespace DynamicIslandPC
 
         public void Dispose()
         {
-            if (isDisposed)
-                return;
+            lock (syncRoot)
+            {
+                if (isDisposed)
+                    return;
 
-            isDisposed = true;
-            Stop();
+                isDisposed = true;
+            }
+            _ = StopAsync();
         }
     }
 }

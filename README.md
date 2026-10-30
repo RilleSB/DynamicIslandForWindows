@@ -6,7 +6,7 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/RilleSB/DynamicIslandForWindows?color=8E44AD&label=Latest%20Release&style=for-the-badge)](https://github.com/RilleSB/DynamicIslandForWindows/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows)](https://github.com/RilleSB/DynamicIslandForWindows)
-[![Framework](https://img.shields.io/badge/.NET-8.0%20WPF-512BD4?style=for-the-badge&logo=dotnet)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
+[![Framework](https://img.shields.io/badge/.NET-10%20WPF-512BD4?style=for-the-badge&logo=dotnet)](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 [![Refresh Rate](https://img.shields.io/badge/Display-165Hz%2B%20Unlocked-FF4757?style=for-the-badge)](https://github.com/RilleSB/DynamicIslandForWindows)
 [![Stealth Mode](https://img.shields.io/badge/Stealth%20Mode-OBS%20%2F%20Discord%20Safe-2ED573?style=for-the-badge)](https://github.com/RilleSB/DynamicIslandForWindows)
 
@@ -130,7 +130,7 @@ DynamicIslandPC hooks directly into the **Windows System Media Transport Control
 ## 📦 Installation
 
 1. Go to the [Releases](../../releases) page and download `DynamicIslandPC.exe` (or the portable zip archive).
-2. Ensure you have [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) installed.
+2. Ensure you have [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) installed.
 3. Launch `DynamicIslandPC.exe` — **no installation required**.
 4. *(Optional)* Right-click the island or tray icon and enable **"Run on Windows Startup"**.
 
@@ -246,7 +246,7 @@ DynamicIslandPC hooks directly into the **Windows System Media Transport Control
 ## 📦 Установка
 
 1. Перейдите во вкладку [Релизы (Releases)](../../releases) и скачайте `DynamicIslandPC.exe` (или zip-архив).
-2. Убедитесь, что на компьютере установлена среда [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0).
+2. Убедитесь, что на компьютере установлена среда [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 3. Запустите файл `DynamicIslandPC.exe` — **установка не требуется**.
 4. *(По желанию)* Нажмите правой кнопкой мыши по острову или иконке в трее и включите **«Запуск вместе с Windows»**.
 

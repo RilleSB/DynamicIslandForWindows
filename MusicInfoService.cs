@@ -23,7 +23,7 @@ namespace DynamicIslandPC
         public TimeSpan Duration { get; set; }
     }
 
-    public class MusicInfoService
+    public class MusicInfoService : IDisposable
     {
         [DllImport("user32.dll")]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
@@ -37,18 +37,34 @@ namespace DynamicIslandPC
         private static readonly Lazy<BitmapImage> DefaultAlbumArtLazy = new(CreateDefaultAlbumArt);
         public static BitmapImage DefaultAlbumArt => DefaultAlbumArtLazy.Value;
 
+        public bool DisableAlbumArtForDiagnostics
+        {
+            get => smtcService?.DisableAlbumArtForDiagnostics ?? false;
+            set
+            {
+                if (smtcService == null)
+                    return;
+
+                smtcService.DisableAlbumArtForDiagnostics = value;
+                if (value && smtcService.GetLastKnownInfo() is MusicInfo info)
+                    info.AlbumArt = DefaultAlbumArt;
+            }
+        }
+
         public event Action<MusicInfo> MusicInfoChanged;
         
         public MusicInfoService()
         {
             smtcService = new SMTCService();
-            smtcService.MusicInfoChanged += info =>
-            {
-                if (info.AlbumArt == null)
-                    info.AlbumArt = DefaultAlbumArt;
-                MusicInfoChanged?.Invoke(info);
-            };
+            smtcService.MusicInfoChanged += OnSmtcMusicInfoChanged;
             smtcService.Initialize();
+        }
+
+        private void OnSmtcMusicInfoChanged(MusicInfo info)
+        {
+            if (info.AlbumArt == null)
+                info.AlbumArt = DefaultAlbumArt;
+            MusicInfoChanged?.Invoke(info);
         }
 
         public MusicInfo GetCurrentMusicInfo()
@@ -114,29 +130,47 @@ namespace DynamicIslandPC
             }
         }
 
-        public async void TogglePlayPause()
+        public async Task TogglePlayPauseAsync()
         {
-            bool handled = await smtcService.TogglePlayPauseAsync();
-            if (!handled)
+            try
             {
+                bool handled = await smtcService.TogglePlayPauseAsync();
+                if (!handled)
+                    SendMediaKey(VK_MEDIA_PLAY_PAUSE);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to toggle playback through SMTC", ex);
                 SendMediaKey(VK_MEDIA_PLAY_PAUSE);
             }
         }
 
-        public async void NextTrack()
+        public async Task NextTrackAsync()
         {
-            bool handled = await smtcService.SkipNextAsync();
-            if (!handled)
+            try
             {
+                bool handled = await smtcService.SkipNextAsync();
+                if (!handled)
+                    SendMediaKey(VK_MEDIA_NEXT_TRACK);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to skip to the next track through SMTC", ex);
                 SendMediaKey(VK_MEDIA_NEXT_TRACK);
             }
         }
 
-        public async void PreviousTrack()
+        public async Task PreviousTrackAsync()
         {
-            bool handled = await smtcService.SkipPreviousAsync();
-            if (!handled)
+            try
             {
+                bool handled = await smtcService.SkipPreviousAsync();
+                if (!handled)
+                    SendMediaKey(VK_MEDIA_PREV_TRACK);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Failed to skip to the previous track through SMTC", ex);
                 SendMediaKey(VK_MEDIA_PREV_TRACK);
             }
         }
@@ -155,6 +189,17 @@ namespace DynamicIslandPC
         {
             keybd_event(key, 0, 0, UIntPtr.Zero);
             keybd_event(key, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+
+        public void Dispose()
+        {
+            if (smtcService == null)
+                return;
+
+            smtcService.MusicInfoChanged -= OnSmtcMusicInfoChanged;
+            smtcService.Dispose();
+            smtcService = null;
+            MusicInfoChanged = null;
         }
     }
 }

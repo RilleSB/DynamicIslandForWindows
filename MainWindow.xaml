@@ -303,7 +303,7 @@
                                         <ScaleTransform x:Name="GifMinimalScale" ScaleX="1" ScaleY="1"/>
                                     </Grid.RenderTransform>
                                     <Border Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF">
-                                        <Image x:Name="GifMinimal" Width="42" Height="42" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                        <Image x:Name="GifMinimal" Width="42" Height="42" Stretch="UniformToFill">
                                             <Image.Clip>
                                                 <RectangleGeometry Rect="0,0,42,42" RadiusX="10" RadiusY="10"/>
                                             </Image.Clip>
@@ -362,7 +362,7 @@
                                     </Border>
                                 </Grid>
                                 <StackPanel x:Name="CompactTextOldContainer" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,8,0">
-                                    <Grid ClipToBounds="True" HorizontalAlignment="Left">
+                                    <Grid ClipToBounds="True" HorizontalAlignment="Left" Width="124">
                                         <TextBlock x:Name="CompactTitleOld" HorizontalAlignment="Left" TextAlignment="Left" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="None">
                                             <TextBlock.RenderTransform><TranslateTransform x:Name="CompactTitleOldTranslate"/></TextBlock.RenderTransform>
                                         </TextBlock>
@@ -413,10 +413,8 @@
                                     </Border>
                                 </Grid>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,8,0">
-                                    <Grid ClipToBounds="True" HorizontalAlignment="Left">
-                                        <TextBlock x:Name="CompactTitle" Text="Название трека" HorizontalAlignment="Left" TextAlignment="Left" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="None">
-                                            <TextBlock.RenderTransform><TranslateTransform x:Name="CompactTitleTranslate"/></TextBlock.RenderTransform>
-                                        </TextBlock>
+                                    <Grid ClipToBounds="True" HorizontalAlignment="Left" Width="124">
+                                        <TextBlock x:Name="CompactTitle" Text="Название трека" HorizontalAlignment="Left" TextAlignment="Left" Foreground="White" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Width="124"/>
                                     </Grid>
                                     <TextBlock x:Name="CompactArtist" Text="Исполнитель" HorizontalAlignment="Left" TextAlignment="Left" Foreground="#A0A0A8" FontSize="9.5" Margin="0,1.5,0,0" TextTrimming="CharacterEllipsis" MaxWidth="160"/>
                                     <Border x:Name="CompactSourceBadge" Margin="0,2,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="5" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="0.8" Padding="4.5,1">
@@ -442,7 +440,7 @@
                                         <ScaleTransform x:Name="GifCompactScale" ScaleX="1" ScaleY="1"/>
                                     </Grid.RenderTransform>
                                     <Border Width="46" Height="46" CornerRadius="12" Background="#1AFFFFFF">
-                                        <Image x:Name="GifCompact" Width="40" Height="40" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                        <Image x:Name="GifCompact" Width="40" Height="40" Stretch="UniformToFill">
                                             <Image.Clip><RectangleGeometry Rect="0,0,40,40" RadiusX="10" RadiusY="10"/></Image.Clip>
                                         </Image>
                                     </Border>
@@ -508,7 +506,7 @@
                                         </Border>
                                     </Grid>
                                     <StackPanel x:Name="ExpandedTextOldContainer" Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
-                                        <Grid ClipToBounds="True">
+                                        <Grid ClipToBounds="True" Width="246" HorizontalAlignment="Left">
                                             <TextBlock x:Name="TrackTitleOld" Foreground="White" FontSize="14" FontWeight="SemiBold" TextTrimming="None">
                                                 <TextBlock.RenderTransform><TranslateTransform x:Name="TrackTitleOldTranslate"/></TextBlock.RenderTransform>
                                             </TextBlock>
@@ -562,10 +560,8 @@
                                         </Border>
                                     </Grid>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
-                                        <Grid ClipToBounds="True">
-                                            <TextBlock x:Name="TrackTitle" Text="Название трека" Foreground="White" FontSize="14" FontWeight="SemiBold" TextTrimming="None">
-                                                <TextBlock.RenderTransform><TranslateTransform x:Name="TrackTitleTranslate"/></TextBlock.RenderTransform>
-                                            </TextBlock>
+                                        <Grid ClipToBounds="True" Width="246" HorizontalAlignment="Left">
+                                            <TextBlock x:Name="TrackTitle" Text="Название трека" Foreground="White" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Width="246"/>
                                         </Grid>
                                         <TextBlock x:Name="ArtistName" Text="Исполнитель" Foreground="#A0A0A8" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
                                         <Border x:Name="ExpandedSourceBadge" Margin="0,5,0,0" HorizontalAlignment="Left" CornerRadius="7" Background="#1821D760" BorderBrush="#3021D760" BorderThickness="0.8" Padding="6,1.5">
@@ -591,7 +587,7 @@
                                             <ScaleTransform x:Name="GifExpandedScale" ScaleX="1" ScaleY="1"/>
                                         </Grid.RenderTransform>
                                         <Border Width="36" Height="36" CornerRadius="9" Background="#1AFFFFFF">
-                                            <Image x:Name="GifExpanded" Width="32" Height="32" Stretch="UniformToFill" gif:ImageBehavior.AnimatedSource="flex.gif">
+                                            <Image x:Name="GifExpanded" Width="32" Height="32" Stretch="UniformToFill">
                                                 <Image.Clip><RectangleGeometry Rect="0,0,32,32" RadiusX="8" RadiusY="8"/></Image.Clip>
                                             </Image>
                                         </Border>
@@ -639,6 +635,10 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock x:Name="CurrentTimeText" Grid.Column="0" Text="0:00" Foreground="#8E8E98" FontSize="9.5" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Громкость системы">
+                                        <TextBlock Text="Громкость системы" Foreground="#8E8E98" FontSize="9" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                        <Slider x:Name="SystemVolumeSlider" Width="150" Height="18" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" ValueChanged="SystemVolumeSlider_ValueChanged"/>
+                                    </StackPanel>
                                     <TextBlock x:Name="TotalTimeText" Grid.Column="2" Text="-0:00" Foreground="#8E8E98" FontSize="9.5" VerticalAlignment="Center"/>
                                 </Grid>
                             </Grid>

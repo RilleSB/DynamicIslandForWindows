@@ -5,7 +5,6 @@ using System.Windows.Forms;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
-using System.Runtime.InteropServices;
 
 namespace DynamicIslandPC
 {
@@ -89,6 +88,9 @@ namespace DynamicIslandPC
 
         private void DebounceSaveSettings()
         {
+            if (_isClosing)
+                return;
+
             if (_saveSettingsDebounceTimer == null)
             {
                 _saveSettingsDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
@@ -277,26 +279,9 @@ namespace DynamicIslandPC
             return new Rect(screen.WorkingArea.Left, screen.WorkingArea.Top, screen.WorkingArea.Width, screen.WorkingArea.Height);
         }
 
-        private (double left, double top) CalculateWindowPosition(double targetWidth, double targetHeight)
-        {
-            var workingArea = GetTargetWorkingArea(customX, customY);
-            if (hasCustomPosition)
-            {
-                var maxLeft = Math.Max(workingArea.Left, workingArea.Right - targetWidth);
-                var maxTop = Math.Max(workingArea.Top, workingArea.Bottom - targetHeight);
-                var left = Math.Clamp(customX - targetWidth / 2, workingArea.Left, maxLeft);
-                var top = Math.Clamp(customY, workingArea.Top, maxTop);
-                return (left, top);
-            }
-
-            var centeredLeft = workingArea.Left + (workingArea.Width - targetWidth) / 2;
-            var topPosition = isTopPosition ? workingArea.Top + 20 : workingArea.Bottom - targetHeight - 60;
-            return (centeredLeft, topPosition);
-        }
-
         private double GetTargetLeft(double targetWidth)
         {
-            return CalculateWindowPosition(targetWidth, Height).left;
+            return _islandModeController.CalculateWindowPosition(targetWidth, Height).left;
         }
 
         private void SetPosition(bool top)
@@ -312,9 +297,7 @@ namespace DynamicIslandPC
 
         private void UpdateWindowPosition()
         {
-            var position = CalculateWindowPosition(Width, Height);
-            Left = position.left;
-            Top = position.top;
+            _islandModeController.UpdateWindowPosition();
         }
 
         private void OpenSettings()
@@ -338,7 +321,7 @@ namespace DynamicIslandPC
                         hasCustomPosition = true;
                         customX = x;
                         customY = y;
-                        var (targetLeft, targetTop) = CalculateWindowPosition(Width, Height);
+                        var (targetLeft, targetTop) = _islandModeController.CalculateWindowPosition(Width, Height);
                         Left = targetLeft;
                         Top = targetTop;
                         DebounceSaveSettings();
@@ -426,6 +409,7 @@ namespace DynamicIslandPC
                 : new SolidColorBrush(Color.FromRgb(90, 90, 98));
 
             UpdateAlbumAccent(albumAccentColor, animated: false);
+            _trackTextPresenter?.SetTheme(dark);
             TrackTitle.Foreground = textColor;
             ArtistName.Foreground = subTextColor;
             CompactTitle.Foreground = textColor;
@@ -449,7 +433,7 @@ namespace DynamicIslandPC
             FavoriteButton.Foreground = dark ? new SolidColorBrush(Color.FromRgb(199, 199, 208)) : new SolidColorBrush(Color.FromRgb(48, 48, 54));
             OutputButton.Foreground = dark ? new SolidColorBrush(Color.FromRgb(199, 199, 208)) : new SolidColorBrush(Color.FromRgb(48, 48, 54));
             if (lastMusicInfo != null)
-                ApplySourceVisuals(lastMusicInfo.SourceApp);
+                _trackTextPresenter?.ApplySourceVisuals(lastMusicInfo.SourceApp);
 
             SyncTrayMenuState();
             SaveSettings();
@@ -460,10 +444,7 @@ namespace DynamicIslandPC
         {
             scale = newScale;
 
-            var (baseWidth, baseHeight) = GetModeSize(displayMode);
-            Width = baseWidth * scale;
-            Height = baseHeight * scale;
-            UpdateWindowPosition();
+            _islandModeController.SetScaleAndPosition();
 
             SyncTrayMenuState();
             SaveSettings();
@@ -571,55 +552,7 @@ namespace DynamicIslandPC
 
         private void ApplyDisplayAffinity(bool exclude)
         {
-            try
-            {
-                var helper = new System.Windows.Interop.WindowInteropHelper(this);
-                IntPtr hwnd = helper.Handle;
-                if (hwnd == IntPtr.Zero)
-                {
-                    try
-                    {
-                        hwnd = helper.EnsureHandle();
-                    }
-                    catch { }
-                }
-
-                if (hwnd == IntPtr.Zero)
-                {
-                    Logger.Log($"ApplyDisplayAffinity deferred: Handle is IntPtr.Zero, waiting for Loaded event (exclude={exclude})");
-                    RoutedEventHandler onLoaded = null;
-                    onLoaded = (s, e) =>
-                    {
-                        Loaded -= onLoaded;
-                        ApplyDisplayAffinity(exclude);
-                    };
-                    Loaded += onLoaded;
-                    return;
-                }
-
-                const uint WDA_NONE = 0x00000000;
-                const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
-                const uint WDA_MONITOR = 0x00000001;
-
-                uint affinity = exclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
-                bool ok = SetWindowDisplayAffinity(hwnd, affinity);
-                int err = Marshal.GetLastWin32Error();
-
-                if (!ok && exclude)
-                {
-                    Logger.Error($"SetWindowDisplayAffinity(0x{affinity:X}) failed (err={err}), attempting fallback to WDA_MONITOR");
-                    bool fallbackOk = SetWindowDisplayAffinity(hwnd, WDA_MONITOR);
-                    int fallbackErr = Marshal.GetLastWin32Error();
-                    Logger.Log($"Fallback SetWindowDisplayAffinity(WDA_MONITOR) result: {fallbackOk}, err={fallbackErr}");
-                }
-
-                GetWindowDisplayAffinity(hwnd, out uint currentAffinity);
-                Logger.Log($"ApplyDisplayAffinity finished for hWnd=0x{hwnd:X}: requested=0x{affinity:X}, ok={ok}, err={err}, actualAffinity=0x{currentAffinity:X}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Failed to apply window display affinity", ex);
-            }
+            _windowChromeController?.ApplySettings(gamingModeEnabled, exclude);
         }
 
         private void SetLiquidGlass(bool enabled)
@@ -732,77 +665,34 @@ namespace DynamicIslandPC
             Logger.Log($"Browser source {(browserSourceEnabled ? "enabled" : "disabled")}");
         }
 
+        private bool DisableAlbumArtForDiagnostics => musicService?.DisableAlbumArtForDiagnostics ?? false;
+
+        private void SetDisableAlbumArtForDiagnostics(bool enabled)
+        {
+            if (musicService == null)
+                return;
+
+            musicService.DisableAlbumArtForDiagnostics = enabled;
+            if (enabled)
+                ClearAlbumArtLayersForDiagnostics();
+
+            SyncTrayMenuState();
+            ApplyMusicInfo(musicService.GetCurrentMusicInfo());
+        }
+
         private void ApplyClickThroughMode()
         {
-            try
-            {
-                var helper = new System.Windows.Interop.WindowInteropHelper(this);
-                if (helper.Handle == IntPtr.Zero)
-                    return;
-
-                var style = GetWindowLong(helper.Handle, GWL_EXSTYLE);
-                var newStyle = gamingModeEnabled
-                    ? style | WS_EX_TRANSPARENT
-                    : style & ~WS_EX_TRANSPARENT;
-
-                if (newStyle != style)
-                    SetWindowLong(helper.Handle, GWL_EXSTYLE, newStyle);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Failed to apply click-through gaming mode", ex);
-            }
+            _windowChromeController?.ApplySettings(gamingModeEnabled, excludeFromCapture);
         }
 
         private void SyncTrayMenuState()
         {
-            if (trayIcon?.ContextMenuStrip == null)
-                return;
-
-            if (trayPositionTopItem != null)
-                trayPositionTopItem.Checked = isTopPosition && !hasCustomPosition;
-            if (trayPositionBottomItem != null)
-                trayPositionBottomItem.Checked = !isTopPosition && !hasCustomPosition;
-            if (trayPositionCustomItem != null)
-                trayPositionCustomItem.Checked = hasCustomPosition;
-
-            if (trayThemeDarkItem != null)
-                trayThemeDarkItem.Checked = isDarkTheme;
-            if (trayThemeLightItem != null)
-                trayThemeLightItem.Checked = !isDarkTheme;
-
-            if (trayScale100Item != null)
-                trayScale100Item.Checked = Math.Abs(scale - 1.0) < 0.01;
-            if (trayScale125Item != null)
-                trayScale125Item.Checked = Math.Abs(scale - 1.25) < 0.01;
-            if (trayScale150Item != null)
-                trayScale150Item.Checked = Math.Abs(scale - 1.5) < 0.01;
-
-            if (trayGamingItem != null)
-                trayGamingItem.Checked = gamingModeEnabled;
-
-            if (trayLockItem != null)
-                trayLockItem.Checked = lockModeEnabled;
-
-            if (trayStartupItem != null)
-                trayStartupItem.Checked = startWithWindowsEnabled;
-
-            if (trayBrowserItem != null)
-                trayBrowserItem.Checked = browserSourceEnabled;
+            _trayMenuController?.UpdateState(CreateTrayMenuState());
         }
 
         private void UpdateTrayController(MusicInfo musicInfo)
         {
-            if (trayTrackItem != null)
-            {
-                var title = string.IsNullOrWhiteSpace(musicInfo?.Title) ? "Нет медиа" : musicInfo.Title;
-                var artist = string.IsNullOrWhiteSpace(musicInfo?.Artist) ? musicInfo?.SourceApp : musicInfo.Artist;
-                var text = string.IsNullOrWhiteSpace(artist) ? title : $"{title} - {artist}";
-                trayTrackItem.Text = text.Length > 60 ? text.Substring(0, 57) + "..." : text;
-            }
-
-            if (trayPlayPauseItem != null)
-                trayPlayPauseItem.Text = musicInfo?.IsPlaying == true ? "Пауза" : "Воспроизведение";
+            _trayMenuController?.UpdateState(CreateTrayMenuState(musicInfo));
         }
 
         private static Color MixBaseAndAccent(Color baseColor, Color accentColor, double accentAmount)

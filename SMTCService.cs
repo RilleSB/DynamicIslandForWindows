@@ -11,7 +11,7 @@ using System.Windows.Media.Imaging;
 
 namespace DynamicIslandPC
 {
-    public class SMTCService
+    public class SMTCService : IDisposable
     {
         private MusicInfo lastKnownInfo = null;
         private GlobalSystemMediaTransportControlsSessionManager sessionManager = null;
@@ -28,14 +28,30 @@ namespace DynamicIslandPC
         private CancellationTokenSource activeFetchCts;
         private bool isFetching = false;
         private bool needsRefetch = false;
+        private bool disposed;
 
         public bool BrowserSourceEnabled { get; set; } = true;
+        private bool disableAlbumArtForDiagnostics;
+        public bool DisableAlbumArtForDiagnostics
+        {
+            get => disableAlbumArtForDiagnostics;
+            set
+            {
+                if (disableAlbumArtForDiagnostics == value)
+                    return;
+
+                disableAlbumArtForDiagnostics = value;
+                lastThumbnailRetryKey = "";
+                if (initialized && !disposed)
+                    TriggerFetch(0);
+            }
+        }
 
         public event Action<MusicInfo> MusicInfoChanged;
 
         public void Initialize()
         {
-            if (initialized) return;
+            if (initialized || disposed) return;
             initialized = true;
 
             Task.Run(async () =>
@@ -43,6 +59,9 @@ namespace DynamicIslandPC
                 try
                 {
                     sessionManager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                    if (disposed)
+                        return;
+
                     if (sessionManager != null)
                     {
                         sessionManager.CurrentSessionChanged += OnSessionChanged;
@@ -56,18 +75,22 @@ namespace DynamicIslandPC
                 }
                 finally
                 {
-                    StartWatchdogTimer();
+                    if (!disposed)
+                        StartWatchdogTimer();
                 }
             });
         }
 
         private void StartWatchdogTimer()
         {
-            if (watchdogTimer != null) return;
+            if (watchdogTimer != null || disposed) return;
             watchdogTimer = new System.Threading.Timer(_ =>
             {
                 try
                 {
+                    if (disposed)
+                        return;
+
                     if (sessionManager == null)
                     {
                         Task.Run(async () =>
@@ -75,6 +98,9 @@ namespace DynamicIslandPC
                             try
                             {
                                 sessionManager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                                if (disposed)
+                                    return;
+
                                 if (sessionManager != null)
                                 {
                                     sessionManager.CurrentSessionChanged += OnSessionChanged;
@@ -121,8 +147,14 @@ namespace DynamicIslandPC
 
         public void TriggerFetch(int debounceMs = 50)
         {
+            if (disposed)
+                return;
+
             lock (stateLock)
             {
+                if (disposed)
+                    return;
+
                 needsRefetch = true;
                 debounceCts?.Cancel();
                 debounceCts?.Dispose();
@@ -133,6 +165,9 @@ namespace DynamicIslandPC
                 {
                     try
                     {
+                        if (disposed)
+                            return;
+
                         if (debounceMs > 0)
                             await Task.Delay(debounceMs, token);
 
@@ -157,6 +192,9 @@ namespace DynamicIslandPC
                 CancellationToken ct;
                 lock (stateLock)
                 {
+                    if (disposed)
+                        return;
+
                     if (!needsRefetch)
                         return;
 
@@ -276,7 +314,8 @@ namespace DynamicIslandPC
             try
             {
                 var liveProps = await session.TryGetMediaPropertiesAsync();
-                if (liveProps != null && (!string.IsNullOrWhiteSpace(liveProps.Title) || liveProps.Thumbnail != null))
+                if (liveProps != null && (!string.IsNullOrWhiteSpace(liveProps.Title) ||
+                    (!DisableAlbumArtForDiagnostics && liveProps.Thumbnail != null)))
                 {
                     props = liveProps;
                 }
@@ -375,14 +414,14 @@ namespace DynamicIslandPC
                 RawTitle = rawTitle,
                 RawArtist = rawArtist,
                 RawSourceApp = rawSource,
-                SessionScore = ScoreSession(session, sanitizedTitle, sanitizedArtist, props.Thumbnail != null, BrowserSourceEnabled, isCurrentSystem),
+                SessionScore = ScoreSession(session, sanitizedTitle, sanitizedArtist, !DisableAlbumArtForDiagnostics && props.Thumbnail != null, BrowserSourceEnabled, isCurrentSystem),
                 IsPlaying = isPlaying,
                 HasMedia = true,
                 Position = currentPos,
                 Duration = totalDuration
             };
 
-            if (props.Thumbnail == null)
+            if (!DisableAlbumArtForDiagnostics && props.Thumbnail == null)
             {
                 // Quick retry loop if thumbnail wasn't ready yet at the moment of track switch
                 for (int i = 0; i < 6; i++)
@@ -401,7 +440,7 @@ namespace DynamicIslandPC
                 }
             }
 
-            if (props.Thumbnail != null)
+            if (!DisableAlbumArtForDiagnostics && props.Thumbnail != null)
             {
                 if (lastKnownInfo?.AlbumArt != null &&
                     string.Equals(lastKnownInfo.RawTitle, rawTitle, StringComparison.Ordinal) &&
@@ -460,13 +499,16 @@ namespace DynamicIslandPC
                     }
                 }
             }
-            else if (lastKnownInfo?.AlbumArt != null &&
+            else if (!DisableAlbumArtForDiagnostics && lastKnownInfo?.AlbumArt != null &&
                      string.Equals(lastKnownInfo.RawTitle, rawTitle, StringComparison.Ordinal) &&
                      string.Equals(lastKnownInfo.RawArtist, rawArtist, StringComparison.Ordinal))
             {
                 // Preserve existing album art if thumbnail is temporarily null on the same track
                 info.AlbumArt = lastKnownInfo.AlbumArt;
             }
+
+            if (DisableAlbumArtForDiagnostics)
+                info.AlbumArt = null;
 
             // If thumbnail is still null for an active track, schedule delayed retries
             if (info.AlbumArt == null && !string.IsNullOrWhiteSpace(info.Title) && session != null)
@@ -499,6 +541,52 @@ namespace DynamicIslandPC
         }
 
         public MusicInfo GetLastKnownInfo() => lastKnownInfo;
+
+        public void Dispose()
+        {
+            System.Threading.Timer timerToDispose;
+            GlobalSystemMediaTransportControlsSessionManager managerToUnsubscribe;
+
+            lock (stateLock)
+            {
+                if (disposed)
+                    return;
+
+                disposed = true;
+                initialized = false;
+                needsRefetch = false;
+                isFetching = false;
+
+                debounceCts?.Cancel();
+                debounceCts?.Dispose();
+                debounceCts = null;
+                activeFetchCts?.Cancel();
+                activeFetchCts?.Dispose();
+                activeFetchCts = null;
+
+                timerToDispose = watchdogTimer;
+                watchdogTimer = null;
+                managerToUnsubscribe = sessionManager;
+                sessionManager = null;
+                UnsubscribeCurrentSession();
+                MusicInfoChanged = null;
+            }
+
+            if (managerToUnsubscribe != null)
+            {
+                try
+                {
+                    managerToUnsubscribe.CurrentSessionChanged -= OnSessionChanged;
+                    managerToUnsubscribe.SessionsChanged -= OnSessionsChanged;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Failed to unsubscribe from SMTC session manager events", ex);
+                }
+            }
+
+            timerToDispose?.Dispose();
+        }
 
         public string GetDiagnostics()
         {
@@ -595,7 +683,9 @@ namespace DynamicIslandPC
                     var title = metadata.Title;
                     var artist = metadata.Artist;
                     bool isCur = object.ReferenceEquals(session, currentSystemSession);
-                    var score = ScoreSession(session, title, artist, props?.Thumbnail != null, BrowserSourceEnabled, isCur);
+                    var score = ScoreSession(session, title, artist,
+                        !DisableAlbumArtForDiagnostics && props?.Thumbnail != null,
+                        BrowserSourceEnabled, isCur);
                     diagnostics.AppendLine($"- {MusicVisualHelper.NormalizeSource(session.SourceAppUserModelId)} | score={score} | playing={IsPlaying(session)} | isCurrent={isCur} | title='{title}' | artist='{artist}' | rawSource='{session.SourceAppUserModelId}'");
 
                     if (score > bestScore)
